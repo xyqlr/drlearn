@@ -796,13 +796,13 @@ def main():
 if __name__ == "__main__":
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Find starting indices of concatenated substrings in a string.")
-    parser.add_argument("--load", type=bool, help="load checkpoint", default=False)
-    parser.add_argument("--iters", type=int, help="number of iterations", default=10)
+    parser.add_argument("--load", action="store_true", help="load the last best checkpoint")
+    parser.add_argument("--iters", type=int, help="number of iterations", default=5)
     parser.add_argument("--episodes", type=int, help="number of episodes/games for each iteration",default=1)
     parser.add_argument("--epochs", type=int, help="number of epochs for training",default=10)
     parser.add_argument("--loglevel", type=str, help="logging level",default='INFO')
-    parser.add_argument("--test", type=bool, help="test against self",default=False)
-    parser.add_argument("--play", type=bool, help="play against human",default=False)
+    parser.add_argument("--test", action="store_true", help="test against self")
+    parser.add_argument("--play", action="store_true", help="play against human")
     
     # Parse the arguments
     inargs = parser.parse_args()
