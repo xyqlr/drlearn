@@ -137,10 +137,10 @@ class BlackJack:
                 #reward = -1 if player == 1 else 1
                 return state0, state1, state[2], -player
             else:
-                return state
+                return state0, state1, state[2], state[3]
         else:  # Stand
             if player == 1:
-                return state1, state0, -1, 0
+                return state1, state0, -1, 0    #dealer's turn
             dealer_state, player_state, _, _ = self.to_state_np(state)
             dealer_sum = max(self._get_value(dealer_state))
             player_sum = max(self._get_value(player_state))
@@ -356,10 +356,10 @@ class MCTS():
     https://github.com/suragnair/alpha-zero-general
     """
 
-    def __init__(self, game, nnet, args):
+    def __init__(self, game, nnet, dealer_nnet, args):
         self.game = game
         self.nnet = nnet
-        self.dealer_nnet = self.nnet.__class__(self.game, self.nnet.args)  # the dealer network
+        self.dealer_nnet = dealer_nnet
         self.args = args
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
@@ -443,7 +443,7 @@ class MCTS():
 
             self.Vs[s] = valids
             self.Ns[s] = 0
-            return -v
+            return v*current_player
 
         valids = self.Vs[s]
         cur_best = -float('inf')
@@ -466,9 +466,10 @@ class MCTS():
         next_s = self.game.get_next_state(state, current_player, a)
 
         if next_s[3] != 0:  #ended
-            return -next_s[3]
-        
-        v = self.search(next_s)
+            v = next_s[3]
+        else:
+            v = self.search(next_s)
+        v *= current_player
 
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
@@ -479,7 +480,7 @@ class MCTS():
             self.Nsa[(s, a)] = 1
 
         self.Ns[s] += 1
-        return -v
+        return v
 
 class Arena():
     """
@@ -515,35 +516,38 @@ class Arena():
                 draw result returned from the game that is neither 1, -1, nor 0.
         """
         players = [self.player2, None, self.player1]
-        curPlayer = 1
-        board = self.game.get_init_state()
+        current_player = 1
+        state = self.game.get_init_state()
         it = 0
 
         for player in players[0], players[2]:
             if hasattr(player, "startGame"):
                 player.startGame()
-
-        while self.game.get_game_ended(board, curPlayer) == 0:
+        ended = False
+        while not ended:
             it += 1
             if verbose:
                 assert self.display
-                log.debug("Turn ", str(it), "Player ", str(curPlayer))
-                self.display(board)
-            action = players[curPlayer + 1](self.game.get_player_agnostic_state(board, curPlayer))
+                logging.debug("Turn ", str(it), "Player ", str(current_player))
+                self.display(state)
+            action = players[current_player + 1](state)
 
-            valids = self.game.get_valid_actions(self.game.get_player_agnostic_state(board, curPlayer), 1)
+            valids = self.game.get_valid_actions(state, current_player)
 
             if valids[action] == 0:
-                log.error(f'Action {action} is not valid!')
-                log.debug(f'valids = {valids}')
+                logging.error(f'Action {action} is not valid!')
+                logging.debug(f'valids = {valids}')
                 assert valids[action] > 0
 
-            # Notifying the opponent for the move
-            opponent = players[-curPlayer + 1]
-            if hasattr(opponent, "notify"):
-                opponent.notify(board, action)
+            state = self.game.get_next_state(state, current_player, action)
+            current_player = state[2]
+            ended = state[3]!=0
 
-            board, curPlayer = self.game.get_next_state(board, curPlayer, action)
+            # Notifying the opponent for the move
+            opponent = players[-current_player + 1]
+            if hasattr(opponent, "notify"):
+                opponent.notify(state, action)
+
 
         for player in players[0], players[2]:
             if hasattr(player, "endGame"):
@@ -551,9 +555,39 @@ class Arena():
 
         if verbose:
             assert self.display
-            log.debug("Game over: Turn ", str(it), "Result ", str(self.game.get_game_ended(board, 1)))
-            self.display(board)
-        return curPlayer * self.game.get_game_ended(board, curPlayer)
+            logging.debug("Game over: Turn ", str(it), "Result ", str(state[3]))
+            self.display(state)
+        return current_player * state[3]
+
+    def eval_game(self, start_state, player_func):
+        """
+        Executes one episode of a game.
+
+        Returns:
+            either
+                winner: player who won the game (1 if player1, -1 if player2)
+            or
+                draw result returned from the game that is neither 1, -1, nor 0.
+        """
+        current_player = 1
+        state = start_state
+
+        ended = False
+        while not ended:
+            action = player_func(state)
+
+            valids = self.game.get_valid_actions(state, current_player)
+
+            if valids[action] == 0:
+                logging.error(f'Action {action} is not valid!')
+                logging.debug(f'valids = {valids}')
+                assert valids[action] > 0
+
+            state = self.game.get_next_state(state, current_player, action)
+            current_player = state[2]
+            ended = state[3]!=0
+
+        return current_player * state[3]
 
     def play_games(self, num, verbose=False):
         """
@@ -566,11 +600,10 @@ class Arena():
             draws:  games won by nobody
         """
 
-        num = int(num / 2)
         oneWon = 0
         twoWon = 0
         draws = 0
-        for _ in tqdm(range(num), desc="Arena.play_games (1)"):
+        for _ in tqdm(range(num), desc="Arena.play_games"):
             gameResult = self.play_game(verbose=verbose)
             if gameResult == 1:
                 oneWon += 1
@@ -579,13 +612,29 @@ class Arena():
             else:
                 draws += 1
 
-        self.player1, self.player2 = self.player2, self.player1
+        return oneWon, twoWon, draws
 
-        for _ in tqdm(range(num), desc="Arena.play_games (2)"):
-            gameResult = self.play_game(verbose=verbose)
-            if gameResult == -1:
+    def eval_games(self, num):
+        """
+        Plays num games in which player1 starts num/2 games and player2 starts
+        num/2 games.
+
+        Returns:
+            oneWon: games won by player1
+            twoWon: games won by player2
+            draws:  games won by nobody
+        """
+
+        oneWon = 0
+        twoWon = 0
+        draws = 0
+        for _ in tqdm(range(num), desc="Arena.play_games"):
+            start_state = self.game.get_init_state()
+            result1 = self.eval_game(start_state, self.player1)
+            result2 = self.eval_game(start_state, self.player2)
+            if result1 > result2:
                 oneWon += 1
-            elif gameResult == 1:
+            elif result1 < result2:
                 twoWon += 1
             else:
                 draws += 1
@@ -604,8 +653,10 @@ class Agent():
         self.game = game
         self.nnet = nnet
         self.pnet = self.nnet.__class__(self.game, nnargs)  # the competitor network
+        self.dealer_nnet = self.nnet.__class__(self.game, nnargs)  # the dealer network
+        self.dealer_pnet = self.nnet.__class__(self.game, nnargs)  # the previous dealer network
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet, self.args)
+        self.mcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in load_train_examples()
 
@@ -627,7 +678,7 @@ class Agent():
         """
         trainExamples = []
         state = self.game.get_init_state()
-        self.curPlayer = 1
+        current_player = state[2]
         episodeStep = 0
 
         while True:
@@ -635,14 +686,21 @@ class Agent():
             temp = int(episodeStep < self.args.tempThreshold)
 
             pi = self.mcts.get_action_prob(state, temp=temp)
+            state_np = self.game.to_state_np(state)
+            if current_player == 1:
+                trainExamples.append([state[0], current_player, pi])
+                trainExamples.append([state[1], -current_player, pi])
+            else:
+                trainExamples.append([state[1], current_player, pi])
+                trainExamples.append([state[0], -current_player, pi])
 
             action = np.random.choice(len(pi), p=pi)
-            state= self.game.get_next_state(state, self.curPlayer, action)
-            self.curPlayer = state[2]
+            state= self.game.get_next_state(state, current_player, action)
+            current_player = state[2]
             r = state[3]
 
             if r != 0:
-                return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
+                return [(x[0], x[2], r *x[1], x[1]) for x in trainExamples]
 
     def learn(self):
         """
@@ -661,7 +719,7 @@ class Agent():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for j in tqdm(range(self.args.numEps), desc="Self Play"):
-                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+                    self.mcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.execute_episode()
 
                 # save the iteration examples to the history 
@@ -684,25 +742,32 @@ class Agent():
             # training new network, keeping a copy of the old one
             self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
             self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            pmcts = MCTS(self.game, self.pnet, self.args)
+            self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
+            self.dealer_pnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
+            pmcts = MCTS(self.game, self.pnet, self.dealer_pnet, self.args)
 
-            self.nnet.fit(trainExamples)
-            nmcts = MCTS(self.game, self.nnet, self.args)
+            player_examples = [(x[0],x[1],x[2]) for x in trainExamples if x[3]==1]
+            dealer_examples = [(x[0],x[1],x[2]) for x in trainExamples if x[3]==-1]
+            self.nnet.fit(player_examples)
+            self.dealer_nnet.fit(dealer_examples)
 
-            # logging.info('PITTING AGAINST PREVIOUS VERSION')
-            # arena = Arena(lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)),
-            #               lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)), self.game)
-            # pwins, nwins, draws = arena.play_games(self.args.arenaCompare)
+            nmcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)
 
-            # logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
-            # if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
-            #     logging.info('REJECTING NEW MODEL')
-            #     self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            # else:
-            #     logging.info('ACCEPTING NEW MODEL')
-            #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.get_checkpoint_file(i))
-            #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
-            #     self.save_train_examples(i - 1, best=True)
+            logging.info('PITTING AGAINST PREVIOUS VERSION')
+            arena = Arena(lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)),
+                          lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)), self.game)
+            nwins, pwins, draws = arena.play_games(self.args.arenaCompare)
+
+            logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
+            if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
+                logging.info('REJECTING NEW MODEL')
+                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
+                self.dealer_nnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
+            else:
+                logging.info('ACCEPTING NEW MODEL')
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
+                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.pth.tar')
+                self.save_train_examples(i - 1, best=True)
 
     def get_checkpoint_file(self, iteration):
         return 'checkpoint_' + str(iteration) + '.pth.tar'
