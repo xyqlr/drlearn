@@ -188,33 +188,15 @@ class BlackJack:
 
     @staticmethod
     def display(state):
-        n = 3
-
-        print("   ", end="")
-        for y in range(n):
-            print (y,"", end="")
-        print("")
-        print("  ", end="")
-        for _ in range(n):
-            print ("-", end="-")
-        print("--")
-        for y in range(n):
-            print(y, "|",end="")    # print the row #
-            for x in range(n):
-                piece = state[y*n+x]    # get the piece to print
-                if piece == -1: print("X ",end="")
-                elif piece == 1: print("O ",end="")
-                else:
-                    if x==n:
-                        print("-",end="")
-                    else:
-                        print("- ",end="")
-            print("|")
-
-        print("  ", end="")
-        for _ in range(n):
-            print ("-", end="-")
-        print("--")
+        player_state, dealer_state, current_player, _ = state
+        if current_player == -1:
+            dealer_state, player_state, _, _ = state
+            dealer_str = ','.join(x for x in dealer_state)
+        else:
+            dealer_str = dealer_state[0]
+        print(f"dealer: {dealer_str}")
+        player_str = ','.join(x for x in player_state)
+        print(f"player: {player_str}\n")
 
 class HumanBlackJackPlayer():
     def __init__(self, game):
@@ -223,17 +205,15 @@ class HumanBlackJackPlayer():
     def play(self, state):
         # display(state)
         valid = self.game.get_valid_actions(state, 1)
-        for i in range(len(valid)):
-            if valid[i]:
-                print(int(i/self.game.n), int(i%self.game.n))
+        str = f"Enter 0 for hit\n" if valid[0] else f""
+        str += f"Enter 1 for stand" if valid[1] else f""
+        print(str)
         while True: 
             # Python 3.x
             a = input()
             # Python 2.x 
             # a = raw_input()
-
-            x,y = [int(x) for x in a.split(' ')]
-            a = self.game.n * x + y if x!= -1 else self.game.n ** 2
+            a = int(a)
             if valid[a]:
                 break
             else:
@@ -557,6 +537,13 @@ class Arena():
             assert self.display
             logging.debug("Game over: Turn ", str(it), "Result ", str(state[3]))
             self.display(state)
+            res = current_player*state[3]
+            if res==1:
+                print("You won!")
+            elif res==-1:
+                print("Dealer won!")
+            else:
+                print("It is a tie")
         return current_player * state[3]
 
     def eval_game(self, start_state, player_func):
@@ -731,7 +718,7 @@ class Agent():
                 self.trainExamplesHistory.pop(0)
             # backup history to a file
             # NB! the examples were collected using the model from the previous iteration, so (i-1)  
-            self.save_train_examples(i - 1)
+            #self.save_train_examples(i - 1)
 
             # shuffle examples before training
             trainExamples = []
@@ -852,7 +839,9 @@ def main():
     if args.test:
         logging.info('Playing against self')
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        mcts = MCTS(game, nnet, args)
+        dealer_nnet = NeuralNetModel(game, nnargs)
+        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
+        mcts = MCTS(game, nnet, dealer_nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
         pwins, nwins, draws = arena.play_games(args.arenaCompare)
@@ -861,10 +850,12 @@ def main():
     elif args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        mcts = MCTS(game, nnet, args)
+        dealer_nnet = NeuralNetModel(game, nnargs)
+        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
+        mcts = MCTS(game, nnet, dealer_nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = HumanBlackJackPlayer(game).play
-        arena = Arena(cp, hp, game, display=BlackJack.display)
+        arena = Arena(hp, cp, game, display=BlackJack.display)
         arena.play_games(args.num_games, verbose = True)
 
     else:
