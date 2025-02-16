@@ -22,7 +22,7 @@ class Agent():
         self.nnet = nnet
         self.pnet = self.nnet.__class__(self.game, nnargs)  # the competitor network
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet, self.args)
+        self.mcts = MCTS(self.game, self.nnet, self.nnet, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in load_train_examples()
 
@@ -43,27 +43,26 @@ class Agent():
                            the player eventually won the game, else -1.
         """
         trainExamples = []
-        board = self.game.get_init_state()
-        self.curPlayer = 1
+        state = self.game.get_init_state()
+        current_player = state[2]
         episodeStep = 0
 
         while True:
             episodeStep += 1
-            canonicalBoard = self.game.get_player_agnostic_state(board, self.curPlayer)
+            canonicalBoard = self.game.get_player_agnostic_state(state, current_player)
             temp = int(episodeStep < self.args.tempThreshold)
 
             pi = self.mcts.get_action_prob(canonicalBoard, temp=temp)
             sym = self.game.get_symmetries(canonicalBoard, pi)
             for b, p in sym:
-                trainExamples.append([b, self.curPlayer, p, None])
+                trainExamples.append([b, current_player, p])
 
             action = np.random.choice(len(pi), p=pi)
-            board, self.curPlayer = self.game.get_next_state(board, self.curPlayer, action)
-
-            r = self.game.get_game_ended(board, self.curPlayer)
-
+            state= self.game.get_next_state(state, current_player, action)
+            current_player = state[2]
+            r = state[3]
             if r != 0:
-                return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
+                return [(x[0], x[2], r *x[1]) for x in trainExamples]
 
     def learn(self):
         """
@@ -82,7 +81,7 @@ class Agent():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for j in tqdm(range(self.args.numEps), desc="Self Play"):
-                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+                    self.mcts = MCTS(self.game, self.nnet, self.nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.execute_episode()
 
                 # save the iteration examples to the history 
@@ -105,10 +104,10 @@ class Agent():
             # training new network, keeping a copy of the old one
             self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
             self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            pmcts = MCTS(self.game, self.pnet, self.args)
+            pmcts = MCTS(self.game, self.pnet, self.pnet, self.args)
 
             self.nnet.fit(trainExamples)
-            nmcts = MCTS(self.game, self.nnet, self.args)
+            nmcts = MCTS(self.game, self.nnet, self.nnet, self.args)
 
             log.info('PITTING AGAINST PREVIOUS VERSION')
             arena = Arena(lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)),

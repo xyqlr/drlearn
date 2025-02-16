@@ -17,8 +17,8 @@ from collections import deque
 from pickle import Pickler, Unpickler
 
 from utils import AverageMeter, dotdict
-
-EPS = 1e-8
+from mcts import MCTS
+from arena import Arena
 
 # Custom Blackjack Environment
 class BlackJack:
@@ -41,13 +41,33 @@ class BlackJack:
         self.card_values = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10])
 
     def get_init_state(self):
+        '''
+        state:  (player_state, dealer_state, current_player, reward)
+            player_state: a list containing the cards of the player
+            dealer_state: a list containing the cards of the dealer
+                only the first card of the dealer is displayed when playing against human 
+            reward:  1    :  if current_player wins
+                    -1    :  if the other player wins
+                    0     :  game not finished
+                    1e-4  :  game is tied
+        when the player stands, it switches to the dealer. for convenicne, the state becomes
+                (dealer_state, player_state, current_player, reward)
+        '''
         self.reset()
         return self.player_hand, self.dealer_hand, self.current_player, 0
     
-    def to_state_np(self, state):
-        #input state: (player_hand, dealer_hand, current_player, reward)
-        #output state: 1D vector of size 14 (count of each card in player's hand)
-        # for player the last one being the first card of the dealer, and for dealer the value of the player
+    def to_neural_state(self, state):
+        '''
+        input state: (player_state, dealer_state, current_player, reward)
+        output state: (player_neural_state, dealer_neural_state, current_player, reward)
+            a neural state is a numpy array of dimension 14, 
+                the first 13 store the count of each card in a hand
+                the last element is different fro the player and the dealer
+                    it is the first card of the dealer for player_neural_state,
+                    it is the the value of the cards of the player for dealer_neural_state.
+            player_neural_state: [num As, num 2s, ..., num Ks, the first card of the dealer]
+            dealer_neural_state: [num As, num 2s, ..., num Ks, the total value of the player]
+        '''
         current_player = state[2]
         player, dealer = 0, 1
         if current_player == -1:
@@ -66,8 +86,83 @@ class BlackJack:
         return (self.n, self.n)
 
     def get_action_size(self):
-        # return number of actions: 0 for hit and 1 for stand
+        '''
+        the number of actions: 2
+            action 0: for hit, meaning wanting more cards
+            action 1: for stand, no more cards for the player and dealer plays next
+        '''
         return 2
+
+    def get_next_state(self, state, player, action):
+        '''
+        this is the critical API which controls the state transition of the game.
+        if player takes action on state, return the next state
+        action must be a valid move
+        '''
+        state0 = copy.copy(state[0])
+        state1 = copy.copy(state[1])
+        if action == 0:  # Hit
+            card = self._deal_next_card(state)
+            state0.append(card)
+            state_np, _, _, _ = self.to_neural_state((state0, state1, state[2], state[3]))
+            if min(self._get_value(state_np)) > 21:
+                #reward = -1 if player == 1 else 1
+                return state0, state1, state[2], -player
+            else:
+                return state0, state1, state[2], state[3]
+        else:  # Stand
+            if player == 1:
+                return state1, state0, -1, 0    #dealer's turn
+            dealer_state, player_state, _, _ = self.to_neural_state(state)
+            dealer_sum = max(self._get_value(dealer_state))
+            player_sum = max(self._get_value(player_state))
+            if player_sum > dealer_sum:
+                return state0, state1, state[2], -player
+            elif player_sum == dealer_sum:
+                return state0, state1, state[2], 1e-4 #small value for tie
+            else:
+                return state0, state1, state[2], player
+
+    def get_valid_actions(self, state, player):
+        '''
+        given the current state, return the valid vector of actions
+        '''
+        valids = [1]*self.get_action_size()
+        current_player = state[2]
+        if current_player == -1: #dealer
+            dealer_state, player_state, _, _ = self.to_neural_state(state)
+            dealer_sum = max(self._get_value(dealer_state))
+            if dealer_sum < 17:
+                valids[1] = 0            
+        return np.array(valids)
+
+    def get_player_agnostic_state(self, state, player):
+        return state
+
+    def get_symmetries(self, state, pi):
+        return [state, pi]
+
+    def state_to_string(self, state):
+        current_player = state[2]
+        if current_player == 1:
+            dealer_str = str(self.index_map[state[1][0]])
+            player_state, _, _, _ = self.to_neural_state(state)
+            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+dealer_str
+        else:
+            dealer_state, player_state, _, _ = self.to_neural_state(state)
+            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+''.join([str(v) for k,v in enumerate(dealer_state[:-1])])
+
+    @staticmethod
+    def display(state):
+        player_state, dealer_state, current_player, _ = state
+        if current_player == -1:
+            dealer_state, player_state, _, _ = state
+            dealer_str = ','.join(x for x in dealer_state)
+        else:
+            dealer_str = dealer_state[0]
+        print(f"dealer: {dealer_str}")
+        player_str = ','.join(x for x in player_state)
+        print(f"player: {player_str}\n")
 
     def _deal_next_card(self, state):
         """
@@ -126,78 +221,6 @@ class BlackJack:
         
         return possible_values
     
-    def get_next_state(self, state, player, action):
-        state0 = copy.copy(state[0])
-        state1 = copy.copy(state[1])
-        if action == 0:  # Hit
-            card = self._deal_next_card(state)
-            state0.append(card)
-            state_np, _, _, _ = self.to_state_np((state0, state1, state[2], state[3]))
-            if min(self._get_value(state_np)) > 21:
-                #reward = -1 if player == 1 else 1
-                return state0, state1, state[2], -player
-            else:
-                return state0, state1, state[2], state[3]
-        else:  # Stand
-            if player == 1:
-                return state1, state0, -1, 0    #dealer's turn
-            dealer_state, player_state, _, _ = self.to_state_np(state)
-            dealer_sum = max(self._get_value(dealer_state))
-            player_sum = max(self._get_value(player_state))
-            if player_sum > dealer_sum:
-                return state0, state1, state[2], -player
-            elif player_sum == dealer_sum:
-                return state0, state1, state[2], 1e-4 #small value for tie
-            else:
-                return state0, state1, state[2], player
-
-    def get_valid_actions(self, state, player):
-        valids = [1]*self.get_action_size()
-        current_player = state[2]
-        if current_player == -1: #dealer
-            dealer_state, player_state, _, _ = self.to_state_np(state)
-            dealer_sum = max(self._get_value(dealer_state))
-            if dealer_sum < 17:
-                valids[1] = 0            
-        return np.array(valids)
-
-    def get_game_ended(self, state, player):
-        # return 0 if not ended, 1 if player 1 won, -1 if player 1 lost
-        # player = 1
-        possible_values = self._get_value(state)
-        if min(possible_values) > 21:  # Bust
-            return -1
-        else:
-            return 0
-
-    def get_player_agnostic_state(self, state, player):
-        return state
-
-    def get_symmetries(self, state, pi):
-        return [state, pi]
-
-    def state_to_string(self, state):
-        current_player = state[2]
-        if current_player == 1:
-            dealer_str = str(self.index_map[state[1][0]])
-            player_state, _, _, _ = self.to_state_np(state)
-            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+dealer_str
-        else:
-            dealer_state, player_state, _, _ = self.to_state_np(state)
-            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+''.join([str(v) for k,v in enumerate(dealer_state[:-1])])
-
-    @staticmethod
-    def display(state):
-        player_state, dealer_state, current_player, _ = state
-        if current_player == -1:
-            dealer_state, player_state, _, _ = state
-            dealer_str = ','.join(x for x in dealer_state)
-        else:
-            dealer_str = dealer_state[0]
-        print(f"dealer: {dealer_str}")
-        player_str = ','.join(x for x in player_state)
-        print(f"player: {player_str}\n")
-
 class HumanBlackJackPlayer():
     def __init__(self, game):
         self.game = game
@@ -330,305 +353,6 @@ class NeuralNetModel(nn.Module):
         checkpoint = torch.load(filepath, map_location=map_location)
         self.load_state_dict(checkpoint['state_dict'])
 
-class MCTS():
-    """
-    This class handles the MCTS tree.
-    https://github.com/suragnair/alpha-zero-general
-    """
-
-    def __init__(self, game, nnet, dealer_nnet, args):
-        self.game = game
-        self.nnet = nnet
-        self.dealer_nnet = dealer_nnet
-        self.args = args
-        self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
-        self.Nsa = {}  # stores #times edge s,a was visited
-        self.Ns = {}  # stores #times board s was visited
-        self.Ps = {}  # stores initial policy (returned by neural net)
-
-        self.Es = {}  # stores game.get_game_ended ended for board s
-        self.Vs = {}  # stores game.get_valid_actions for board s
-
-    def get_action_prob(self, state, temp=1):
-        """
-        This function performs numMCTSSims simulations of MCTS starting from
-        state.
-
-        Returns:
-            probs: a policy vector where the probability of the ith action is
-                   proportional to Nsa[(s,a)]**(1./temp)
-        """
-        for i in range(self.args.numMCTSSims):
-            self.search(state)
-
-        s = self.game.state_to_string(state)
-        counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.get_action_size())]
-
-        if temp == 0:
-            bestAs = np.array(np.argwhere(counts == np.max(counts))).flatten()
-            bestA = np.random.choice(bestAs)
-            probs = [0] * len(counts)
-            probs[bestA] = 1
-            return probs
-
-        counts = [x ** (1. / temp) for x in counts]
-        counts_sum = float(sum(counts))
-        probs = [x / counts_sum for x in counts]
-        return probs
-
-    def search(self, state):
-        """
-        This function performs one iteration of MCTS. It is recursively called
-        till a leaf node is found. The action chosen at each node is one that
-        has the maximum upper confidence bound as in the paper.
-
-        Once a leaf node is found, the neural network is called to return an
-        initial policy P and a value v for the state. This value is propagated
-        up the search path. In case the leaf node is a terminal state, the
-        outcome is propagated up the search path. The values of Ns, Nsa, Qsa are
-        updated.
-
-        NOTE: the return values are the negative of the value of the current
-        state. This is done since v is in [-1,1] and if v is the value of a
-        state for the current player, then its value is -v for the other player.
-
-        Returns:
-            v: the negative of the value of the current state
-        """
-
-        s = self.game.state_to_string(state)
-        current_player = state[2]
-
-        if s not in self.Ps:
-            # leaf node
-            state_np = self.game.to_state_np(state)
-            state_in = state_np[0]
-            if current_player == 1:
-                self.Ps[s], v = self.nnet.predict(state_in)
-            else:
-                self.Ps[s], v = self.dealer_nnet.predict(state_in)
-            valids = self.game.get_valid_actions(state, current_player)
-            self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
-            sum_Ps_s = np.sum(self.Ps[s])
-            if sum_Ps_s > 0:
-                self.Ps[s] /= sum_Ps_s  # renormalize
-            else:
-                # if all valid moves were masked make all valid moves equally probable
-
-                # NB! All valid moves may be masked if either your NNet architecture is insufficient or you've get overfitting or something else.
-                # If you have got dozens or hundreds of these messages you should pay attention to your NNet and/or training process.   
-                logging.error("All valid moves were masked, doing a workaround.")
-                self.Ps[s] = self.Ps[s] + valids
-                self.Ps[s] /= np.sum(self.Ps[s])
-
-            self.Vs[s] = valids
-            self.Ns[s] = 0
-            return v*current_player
-
-        valids = self.Vs[s]
-        cur_best = -float('inf')
-        best_act = -1
-
-        # pick the action with the highest upper confidence bound
-        for a in range(self.game.get_action_size()):
-            if valids[a]:
-                if (s, a) in self.Qsa:
-                    u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
-                            1 + self.Nsa[(s, a)])
-                else:
-                    u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
-
-                if u > cur_best:
-                    cur_best = u
-                    best_act = a
-
-        a = best_act
-        next_s = self.game.get_next_state(state, current_player, a)
-
-        if next_s[3] != 0:  #ended
-            v = next_s[3]
-        else:
-            v = self.search(next_s)
-        v *= current_player
-
-        if (s, a) in self.Qsa:
-            self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
-            self.Nsa[(s, a)] += 1
-
-        else:
-            self.Qsa[(s, a)] = v
-            self.Nsa[(s, a)] = 1
-
-        self.Ns[s] += 1
-        return v
-
-class Arena():
-    """
-    An Arena class where any 2 agents can be pit against each other.
-    https://github.com/suragnair/alpha-zero-general
-    """
-
-    def __init__(self, player1, player2, game, display=None):
-        """
-        Input:
-            player 1,2: two functions that takes board as input, return action
-            game: Game object
-            display: a function that takes board as input and prints it (e.g.
-                     display in othello/OthelloGame). Is necessary for verbose
-                     mode.
-
-        see othello/OthelloPlayers.py for an example. See pit.py for pitting
-        human players/other baselines with each other.
-        """
-        self.player1 = player1
-        self.player2 = player2
-        self.game = game
-        self.display = display
-
-    def play_game(self, verbose=False):
-        """
-        Executes one episode of a game.
-
-        Returns:
-            either
-                winner: player who won the game (1 if player1, -1 if player2)
-            or
-                draw result returned from the game that is neither 1, -1, nor 0.
-        """
-        players = [self.player2, None, self.player1]
-        current_player = 1
-        state = self.game.get_init_state()
-        it = 0
-
-        for player in players[0], players[2]:
-            if hasattr(player, "startGame"):
-                player.startGame()
-        ended = False
-        while not ended:
-            it += 1
-            if verbose:
-                assert self.display
-                logging.debug("Turn ", str(it), "Player ", str(current_player))
-                self.display(state)
-            action = players[current_player + 1](state)
-
-            valids = self.game.get_valid_actions(state, current_player)
-
-            if valids[action] == 0:
-                logging.error(f'Action {action} is not valid!')
-                logging.debug(f'valids = {valids}')
-                assert valids[action] > 0
-
-            state = self.game.get_next_state(state, current_player, action)
-            current_player = state[2]
-            ended = state[3]!=0
-
-            # Notifying the opponent for the move
-            opponent = players[-current_player + 1]
-            if hasattr(opponent, "notify"):
-                opponent.notify(state, action)
-
-
-        for player in players[0], players[2]:
-            if hasattr(player, "endGame"):
-                player.endGame()
-
-        if verbose:
-            assert self.display
-            logging.debug("Game over: Turn ", str(it), "Result ", str(state[3]))
-            self.display(state)
-            res = state[3]
-            if res==1:
-                print("Player won!")
-            elif res==-1:
-                print("Dealer won!")
-            else:
-                print("It is a tie")
-        return state[3]
-
-    def eval_game(self, start_state, player_func):
-        """
-        Executes one episode of a game.
-
-        Returns:
-            either
-                winner: player who won the game (1 if player1, -1 if player2)
-            or
-                draw result returned from the game that is neither 1, -1, nor 0.
-        """
-        current_player = 1
-        state = start_state
-
-        ended = False
-        while not ended:
-            action = player_func(state)
-
-            valids = self.game.get_valid_actions(state, current_player)
-
-            if valids[action] == 0:
-                logging.error(f'Action {action} is not valid!')
-                logging.debug(f'valids = {valids}')
-                assert valids[action] > 0
-
-            state = self.game.get_next_state(state, current_player, action)
-            current_player = state[2]
-            ended = state[3]!=0
-
-        return state[3]
-
-    def play_games(self, num, verbose=False):
-        """
-        Plays num games in which player1 starts num/2 games and player2 starts
-        num/2 games.
-
-        Returns:
-            oneWon: games won by player1
-            twoWon: games won by player2
-            draws:  games won by nobody
-        """
-
-        oneWon = 0
-        twoWon = 0
-        draws = 0
-        for _ in range(num):
-            gameResult = self.play_game(verbose=verbose)
-            if gameResult == 1:
-                oneWon += 1
-            elif gameResult == -1:
-                twoWon += 1
-            else:
-                draws += 1
-
-        return oneWon, twoWon, draws
-
-    def eval_games(self, num):
-        """
-        Plays num games in which player1 starts num/2 games and player2 starts
-        num/2 games.
-
-        Returns:
-            oneWon: games won by player1
-            twoWon: games won by player2
-            draws:  games won by nobody
-        """
-
-        oneWon = 0
-        twoWon = 0
-        draws = 0
-        for _ in tqdm(range(num), desc="Arena.eval_games"):
-            start_state = self.game.get_init_state()
-            result1 = self.eval_game(start_state, self.player1)
-            result2 = self.eval_game(start_state, self.player2)
-            if result1 > result2:
-                oneWon += 1
-            elif result1 < result2:
-                twoWon += 1
-            else:
-                draws += 1
-
-        return oneWon, twoWon, draws
-
-
 class Agent():
     """
     This class executes the self-play + learning. It uses the functions defined
@@ -673,7 +397,7 @@ class Agent():
             temp = int(episodeStep < self.args.tempThreshold)
 
             pi = self.mcts.get_action_prob(state, temp=temp)
-            state_np = self.game.to_state_np(state)
+            state_np = self.game.to_neural_state(state)
             if current_player == 1:
                 trainExamples.append([state[0], current_player, pi])
                 trainExamples.append([state[1], -current_player, pi])

@@ -1,4 +1,4 @@
-import logging as log
+import logging
 from tqdm import tqdm
 
 class Arena():
@@ -35,23 +35,24 @@ class Arena():
                 draw result returned from the game that is neither 1, -1, nor 0.
         """
         players = [self.player2, None, self.player1]
-        curPlayer = 1
-        board = self.game.get_init_state()
+        current_player = 1
+        state = self.game.get_init_state()
         it = 0
 
         for player in players[0], players[2]:
             if hasattr(player, "startGame"):
                 player.startGame()
 
-        while self.game.get_game_ended(board, curPlayer) == 0:
+        ended = False
+        while not ended:
             it += 1
             if verbose:
                 assert self.display
-                log.debug("Turn ", str(it), "Player ", str(curPlayer))
-                self.display(board)
-            action = players[curPlayer + 1](self.game.get_player_agnostic_state(board, curPlayer))
+                log.debug("Turn ", str(it), "Player ", str(current_player))
+                self.display(state)
+            action = players[current_player + 1](self.game.get_player_agnostic_state(state, current_player))
 
-            valids = self.game.get_valid_actions(self.game.get_player_agnostic_state(board, curPlayer), 1)
+            valids = self.game.get_valid_actions(self.game.get_player_agnostic_state(state, current_player), 1)
 
             if valids[action] == 0:
                 log.error(f'Action {action} is not valid!')
@@ -59,11 +60,13 @@ class Arena():
                 assert valids[action] > 0
 
             # Notifying the opponent for the move
-            opponent = players[-curPlayer + 1]
+            opponent = players[-current_player + 1]
             if hasattr(opponent, "notify"):
-                opponent.notify(board, action)
+                opponent.notify(state, action)
 
-            board, curPlayer = self.game.get_next_state(board, curPlayer, action)
+            state = self.game.get_next_state(state, current_player, action)
+            current_player = state[2]
+            ended = state[3]!=0
 
         for player in players[0], players[2]:
             if hasattr(player, "endGame"):
@@ -71,9 +74,15 @@ class Arena():
 
         if verbose:
             assert self.display
-            log.debug("Game over: Turn ", str(it), "Result ", str(self.game.get_game_ended(board, 1)))
-            self.display(board)
-        return curPlayer * self.game.get_game_ended(board, curPlayer)
+            logging.debug("Game over: Turn ", str(it), "Result ", str(state[3]))
+            res = state[3]
+            if res==1:
+                print("Player won!")
+            elif res==-1:
+                print("Dealer won!")
+            else:
+                print("It is a tie")
+        return state[3]
 
     def play_games(self, num, verbose=False):
         """
@@ -112,3 +121,59 @@ class Arena():
 
         return oneWon, twoWon, draws
 
+    def eval_game(self, start_state, player_func):
+        """
+        Executes one episode of a game.
+
+        Returns:
+            either
+                winner: player who won the game (1 if player1, -1 if player2)
+            or
+                draw result returned from the game that is neither 1, -1, nor 0.
+        """
+        current_player = 1
+        state = start_state
+
+        ended = False
+        while not ended:
+            action = player_func(state)
+
+            valids = self.game.get_valid_actions(state, current_player)
+
+            if valids[action] == 0:
+                logging.error(f'Action {action} is not valid!')
+                logging.debug(f'valids = {valids}')
+                assert valids[action] > 0
+
+            state = self.game.get_next_state(state, current_player, action)
+            current_player = state[2]
+            ended = state[3]!=0
+
+        return state[3]
+
+    def eval_games(self, num):
+        """
+        Plays num games in which player1 starts num/2 games and player2 starts
+        num/2 games.
+
+        Returns:
+            oneWon: games won by player1
+            twoWon: games won by player2
+            draws:  games won by nobody
+        """
+
+        oneWon = 0
+        twoWon = 0
+        draws = 0
+        for _ in tqdm(range(num), desc="Arena.eval_games"):
+            start_state = self.game.get_init_state()
+            result1 = self.eval_game(start_state, self.player1)
+            result2 = self.eval_game(start_state, self.player2)
+            if result1 > result2:
+                oneWon += 1
+            elif result1 < result2:
+                twoWon += 1
+            else:
+                draws += 1
+
+        return oneWon, twoWon, draws
