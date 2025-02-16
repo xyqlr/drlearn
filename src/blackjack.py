@@ -228,10 +228,10 @@ class NeuralNetModel(nn.Module):
         self.action_size = game.get_action_size()
         self.args = args
         super().__init__()
-        self.fc1 = nn.Linear(self.state_size, 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, self.action_size)
-        self.fc4 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(self.state_size, args.num_channels)
+        self.fc2 = nn.Linear(args.num_channels, args.num_channels)
+        self.fc3 = nn.Linear(args.num_channels, self.action_size)
+        self.fc4 = nn.Linear(args.num_channels, 1)
         if args.cuda:
             super().cuda()
 
@@ -537,14 +537,14 @@ class Arena():
             assert self.display
             logging.debug("Game over: Turn ", str(it), "Result ", str(state[3]))
             self.display(state)
-            res = current_player*state[3]
+            res = state[3]
             if res==1:
-                print("You won!")
+                print("Player won!")
             elif res==-1:
                 print("Dealer won!")
             else:
                 print("It is a tie")
-        return current_player * state[3]
+        return state[3]
 
     def eval_game(self, start_state, player_func):
         """
@@ -574,7 +574,7 @@ class Arena():
             current_player = state[2]
             ended = state[3]!=0
 
-        return current_player * state[3]
+        return state[3]
 
     def play_games(self, num, verbose=False):
         """
@@ -590,7 +590,7 @@ class Arena():
         oneWon = 0
         twoWon = 0
         draws = 0
-        for _ in tqdm(range(num), desc="Arena.play_games"):
+        for _ in range(num):
             gameResult = self.play_game(verbose=verbose)
             if gameResult == 1:
                 oneWon += 1
@@ -615,7 +615,7 @@ class Arena():
         oneWon = 0
         twoWon = 0
         draws = 0
-        for _ in tqdm(range(num), desc="Arena.play_games"):
+        for _ in tqdm(range(num), desc="Arena.eval_games"):
             start_state = self.game.get_init_state()
             result1 = self.eval_game(start_state, self.player1)
             result2 = self.eval_game(start_state, self.player2)
@@ -740,10 +740,10 @@ class Agent():
 
             nmcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)
 
-            logging.info('PITTING AGAINST PREVIOUS VERSION')
+            logging.info('PLAYING AGAINST PREVIOUS VERSION')
             arena = Arena(lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)),
                           lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)), self.game)
-            nwins, pwins, draws = arena.play_games(self.args.arenaCompare)
+            nwins, pwins, draws = arena.eval_games(self.args.games_eval)
 
             logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
@@ -801,7 +801,7 @@ args = dotdict({
     'updateThreshold': 0.6,     # During arena playoff, new neural net will be accepted if threshold or more of games are won.
     'maxlenOfQueue': 200000,    # Number of game examples to train the neural networks.
     'numMCTSSims': 25,          # Number of games moves for MCTS to simulate.
-    'arenaCompare': 40,         # Number of games to play during arena play to determine if new net will be accepted.
+    'games_eval': 40,         # Number of games to play during arena play to determine if new net will be accepted.
     'cpuct': 1,
 
     'checkpoint': './temp/',
@@ -811,7 +811,7 @@ args = dotdict({
     'log_level': 'INFO',
     'test': False,
     'play': False,
-    'num_games': 2,
+    'games_play': 2,
 })
 
 nnargs = dotdict({
@@ -844,9 +844,9 @@ def main():
         mcts = MCTS(game, nnet, dealer_nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
-        pwins, nwins, draws = arena.play_games(args.arenaCompare)
+        pwins, dwins, draws = arena.play_games(args.games_eval)
 
-        logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
+        logging.info('PLAYER/DEALER WINS : %d / %d ; DRAWS : %d' % (pwins, dwins, draws))
     elif args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
@@ -856,7 +856,7 @@ def main():
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = HumanBlackJackPlayer(game).play
         arena = Arena(hp, cp, game, display=BlackJack.display)
-        arena.play_games(args.num_games, verbose = True)
+        arena.play_games(args.games_play, verbose = True)
 
     else:
         if args.load_model:
@@ -881,6 +881,9 @@ if __name__ == "__main__":
     parser.add_argument("--iters", type=int, help="number of iterations", default=5)
     parser.add_argument("--episodes", type=int, help="number of episodes/games for each iteration",default=1)
     parser.add_argument("--epochs", type=int, help="number of epochs for training",default=10)
+    parser.add_argument("--channels", type=int, help="number of channels for the neural network",default=64)
+    parser.add_argument("--games_play", type=int, help="number of games to play",default=2)
+    parser.add_argument("--games_eval", type=int, help="number of games to eval",default=100)
     parser.add_argument("--loglevel", type=str, help="logging level",default='INFO')
     parser.add_argument("--test", action="store_true", help="test against self")
     parser.add_argument("--play", action="store_true", help="play against human")
@@ -895,6 +898,9 @@ if __name__ == "__main__":
     args.log_level = inargs.loglevel
     args.test = inargs.test
     args.play = inargs.play
+    args.games_play = inargs.games_play
+    args.games_eval = inargs.games_eval
     nnargs.epochs = inargs.epochs
+    nnargs.num_channels = inargs.channels
 
     main()
