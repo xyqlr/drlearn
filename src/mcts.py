@@ -71,6 +71,10 @@ class MCTS():
 
         s = self.game.state_to_string(state)
         current_player = state[2]
+        v = self.game.get_game_ended(state, 1)  #player agonistic state
+        if v != 0:
+            # terminal node
+            return -v
 
         if s not in self.Ps:
             # leaf node
@@ -80,7 +84,7 @@ class MCTS():
                 self.Ps[s], v = self.nnet.predict(state_in)
             else:
                 self.Ps[s], v = self.nnet2.predict(state_in)
-            valids = self.game.get_valid_actions(state, 1)
+            valids = self.game.get_valid_actions(state, 1)  #player agonistic state
             self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
             sum_Ps_s = np.sum(self.Ps[s])
             if sum_Ps_s > 0:
@@ -116,14 +120,12 @@ class MCTS():
                     best_act = a
 
         a = best_act
-        next_s = self.game.get_next_state(state, current_player, a)
+        next_s = self.game.get_next_state(state, 1, a) #player agonistic state
         next_player = next_s[2]
         next_s = self.game.get_player_agnostic_state(next_s, next_player)
 
-        if next_s[3] != 0:  #ended
-            v = next_s[3]
-        else:
-            v = self.search(next_s)
+        v = self.search(next_s)
+            
         if current_player != next_player:
             v = -v
         else:

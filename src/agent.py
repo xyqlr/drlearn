@@ -44,23 +44,23 @@ class Agent():
         """
         trainExamples = []
         state = self.game.get_init_state()
-        current_player = state[2]
-        episodeStep = 0
+        current_player = 1
+        step = 0
 
         while True:
-            episodeStep += 1
-            canonicalBoard = self.game.get_player_agnostic_state(state, current_player)
-            temp = int(episodeStep < self.args.tempThreshold)
+            step += 1
+            state_ag = self.game.get_player_agnostic_state(state, current_player)
+            temp = int(step < self.args.tempThreshold)
 
-            pi = self.mcts.get_action_prob(canonicalBoard, temp=temp)
-            sym = self.game.get_symmetries(canonicalBoard, pi)
+            pi = self.mcts.get_action_prob(state_ag, temp=temp)
+            sym = self.game.get_symmetries(state_ag, pi)
             for b, p in sym:
                 trainExamples.append([b, current_player, p])
 
             action = np.random.choice(len(pi), p=pi)
             state= self.game.get_next_state(state, current_player, action)
             current_player = state[2]
-            r = state[3]
+            r = self.game.get_game_ended(state, current_player)
             if r != 0:
                 return [(x[0], x[2], r *x[1]) for x in trainExamples]
 
