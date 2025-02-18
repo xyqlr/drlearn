@@ -93,7 +93,7 @@ class Agent():
                 self.trainExamplesHistory.pop(0)
             # backup history to a file
             # NB! the examples were collected using the model from the previous iteration, so (i-1)  
-            self.save_train_examples(i - 1)
+            #self.save_train_examples(i - 1)
 
             # shuffle examples before training
             trainExamples = []
@@ -120,7 +120,6 @@ class Agent():
                 self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
             else:
                 log.info('ACCEPTING NEW MODEL')
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.get_checkpoint_file(i))
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
                 self.save_train_examples(i - 1, best=True)
 
@@ -132,7 +131,7 @@ class Agent():
         if not os.path.exists(folder):
             os.makedirs(folder)
         if best:
-            filename = os.path.join(folder, "best.pth.tar.examples")
+            filename = os.path.join(folder, self.game.__class__.__name__+".best.pth.tar.examples")
         else:
             filename = os.path.join(folder, self.get_checkpoint_file(iteration) + ".examples")
         with open(filename, "wb+") as f:
@@ -144,7 +143,7 @@ class Agent():
             folder = self.args.checkpoint
             if not os.path.exists(folder):
                 os.makedirs(folder)
-            modelFile = os.path.join(folder, "best.pth.tar")
+            modelFile = os.path.join(folder, self.game.__class__.__name__+".best.pth.tar")
         else:
             modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
         examplesFile = modelFile + ".examples"

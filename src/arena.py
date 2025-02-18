@@ -48,15 +48,15 @@ class Arena():
             it += 1
             if verbose:
                 assert self.display
-                log.debug("Turn ", str(it), "Player ", str(current_player))
+                logging.debug("Turn ", str(it), "Player ", str(current_player))
                 self.display(state)
             action = players[current_player + 1](self.game.get_player_agnostic_state(state, current_player))
 
             valids = self.game.get_valid_actions(self.game.get_player_agnostic_state(state, current_player), 1)
 
             if valids[action] == 0:
-                log.error(f'Action {action} is not valid!')
-                log.debug(f'valids = {valids}')
+                logging.error(f'Action {action} is not valid!')
+                logging.debug(f'valids = {valids}')
                 assert valids[action] > 0
 
             # Notifying the opponent for the move
@@ -75,14 +75,14 @@ class Arena():
         if verbose:
             assert self.display
             logging.debug("Game over: Turn ", str(it), "Result ", str(state[3]))
-            res = state[3]
+            res = state[3]*current_player
             if res==1:
                 print("Player won!")
             elif res==-1:
-                print("Dealer won!")
+                print("The other won!")
             else:
                 print("It is a tie")
-        return state[3]
+        return state[3]*current_player
 
     def play_games(self, num, verbose=False):
         """

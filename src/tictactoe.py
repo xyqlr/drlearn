@@ -93,7 +93,8 @@ class TicTacToe:
         a state that is agonistic to the player, which is fed to the neural network for both players
         return state if player==1, else return -state if player==-1
         '''
-        return player*state[0], player*state[1], state[2], state[3]
+        state0 = state[0]*player
+        return state0, state0, state[2], state[3]
 
     def get_symmetries(self, state, pi):
         # mirror, rotational
@@ -123,7 +124,7 @@ class TicTacToe:
     @staticmethod
     def display(state):
         n = 3
-
+        state0 = state[0]
         print("   ", end="")
         for y in range(n):
             print (y,"", end="")
@@ -135,7 +136,7 @@ class TicTacToe:
         for y in range(n):
             print(y, "|",end="")    # print the row #
             for x in range(n):
-                piece = state[y*n+x]    # get the piece to print
+                piece = state0[y*n+x]    # get the piece to print
                 if piece == -1: print("X ",end="")
                 elif piece == 1: print("O ",end="")
                 else:
@@ -191,6 +192,7 @@ class NeuralNetModel(nn.Module):
         self.board_x, self.board_y = game.get_shape()
         self.action_size = game.get_action_size()
         self.args = args
+        self.game = game
 
         super().__init__()
         self.conv1 = nn.Conv2d(1, args.num_channels, 3, stride=1, padding=1)
@@ -299,7 +301,7 @@ class NeuralNetModel(nn.Module):
         return torch.sum((targets - outputs.view(-1)) ** 2) / targets.size()[0]
 
     def save_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
-        filepath = os.path.join(folder, filename)
+        filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
         if not os.path.exists(folder):
             logging.debug("Checkpoint Directory does not exist! Making directory {}".format(folder))
             os.mkdir(folder)
@@ -311,7 +313,7 @@ class NeuralNetModel(nn.Module):
 
     def load_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
         # https://github.com/pytorch/examples/blob/master/imagenet/main.py#L98
-        filepath = os.path.join(folder, filename)
+        filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
         if not os.path.exists(filepath):
             raise ("No model in path {}".format(filepath))
         map_location = None if self.args.cuda else 'cpu'
@@ -363,7 +365,7 @@ def main():
     if args.test:
         logging.info('Playing against self')
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        mcts = MCTS(game, nnet, args)
+        mcts = MCTS(game, nnet, nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
         pwins, nwins, draws = arena.play_games(args.arenaCompare)
@@ -372,7 +374,7 @@ def main():
     elif args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        mcts = MCTS(game, nnet, args)
+        mcts = MCTS(game, nnet, nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = HumanTicTacToePlayer(game).play
         arena = Arena(cp, hp, game, display=TicTacToe.display)

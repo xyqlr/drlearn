@@ -124,7 +124,10 @@ class MCTS():
             v = next_s[3]
         else:
             v = self.search(next_s)
-        v *= current_player
+        if current_player != next_player:
+            v = -v
+        else:
+            v *= current_player
 
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
