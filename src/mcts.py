@@ -10,10 +10,9 @@ class MCTS():
     https://github.com/suragnair/alpha-zero-general
     """
 
-    def __init__(self, game, nnet, nnet2, args):
+    def __init__(self, game, nnet, args):
         self.game = game
         self.nnet = nnet
-        self.nnet2 = nnet2
         self.args = args
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
@@ -80,10 +79,7 @@ class MCTS():
             # leaf node
             state_np = self.game.to_neural_state(state)
             state_in = state_np[0]
-            if current_player == 1:
-                self.Ps[s], v = self.nnet.predict(state_in)
-            else:
-                self.Ps[s], v = self.nnet2.predict(state_in)
+            self.Ps[s], v = self.nnet.predict(state_in)
             valids = self.game.get_valid_actions(state, 1)  #player agonistic state
             self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
             sum_Ps_s = np.sum(self.Ps[s])
@@ -126,11 +122,6 @@ class MCTS():
 
         v = self.search(next_s)
             
-        if current_player != next_player:
-            v = -v
-        else:
-            v *= current_player
-
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
             self.Nsa[(s, a)] += 1
@@ -140,5 +131,5 @@ class MCTS():
             self.Nsa[(s, a)] = 1
 
         self.Ns[s] += 1
-        return v
+        return -v
 

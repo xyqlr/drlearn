@@ -17,8 +17,11 @@ from collections import deque
 from pickle import Pickler, Unpickler
 
 from utils import AverageMeter, dotdict
-from mcts import MCTS
+from mcts import MCTS, EPS
 from arena import Arena
+from nnet import NeuralNetModel
+from agent import Agent
+import args
 
 # Custom Blackjack Environment
 class BlackJack:
@@ -142,6 +145,36 @@ class BlackJack:
     def get_symmetries(self, state, pi):
         return [state, pi]
 
+    def get_game_ended(self, state, player):
+        '''
+        this returns the ending status of the game:
+            1   : if the player wins
+            -1  : if the player loses
+            0   : a tie
+            1e-4: game not ended
+        '''
+        if player == 1:
+            player_state, _, _, _ = self.to_neural_state(state)
+            player_value = self._get_value(player_state)
+            if min(player_value) > 21:
+                return -1
+            return 0        #not ended
+        else:
+            dealer_state, player_state, _, _ = self.to_neural_state(state)
+            dealer_value = self._get_value(dealer_state)
+            if min(dealer_value) > 21:
+                return 1
+            dealer_sum = max(dealer_value)
+            if dealer_sum < 17:
+                return 0    #not ended
+            player_sum = max(self._get_value(player_state))
+            if player_sum > dealer_sum:
+                return 1
+            elif player_sum == dealer_sum:
+                return 1e-4 #small value for tie
+            else:
+                return -1
+
     def state_to_string(self, state):
         current_player = state[2]
         if current_player == 1:
@@ -244,19 +277,16 @@ class HumanBlackJackPlayer():
 
         return a
 
-class NeuralNetModel(nn.Module):
+class BlackJackModel(NeuralNetModel):
     def __init__(self, game, args):
         # game params
         self.state_size = game.get_shape()[0]+1
         self.action_size = game.get_action_size()
-        self.args = args
-        super().__init__()
+        super().__init__(game, args)
         self.fc1 = nn.Linear(self.state_size, args.num_channels)
         self.fc2 = nn.Linear(args.num_channels, args.num_channels)
         self.fc3 = nn.Linear(args.num_channels, self.action_size)
         self.fc4 = nn.Linear(args.num_channels, 1)
-        if args.cuda:
-            super().cuda()
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -266,48 +296,6 @@ class NeuralNetModel(nn.Module):
 
         return F.log_softmax(pi, dim=1), torch.tanh(v)
         return self.fc3(x)
-
-    def fit(self, examples):
-        """
-        examples: list of examples, each example is of form (state, pi, v)
-        """
-        optimizer = optim.Adam(self.parameters())
-
-        for epoch in range(self.args.epochs):
-            logging.info('EPOCH ::: ' + str(epoch + 1))
-            super().train()
-            pi_losses = AverageMeter()
-            v_losses = AverageMeter()
-
-            batch_count = int(len(examples) / self.args.batch_size)
-
-            t = tqdm(range(batch_count), desc='Training Net')
-            for _ in t:
-                sample_ids = np.random.randint(len(examples), size=self.args.batch_size)
-                states, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                states = torch.FloatTensor(np.array(states).astype(np.float64))
-                target_pis = torch.FloatTensor(np.array(pis))
-                target_vs = torch.FloatTensor(np.array(vs).astype(np.float64))
-
-                # predict
-                if self.args.cuda:
-                    states, target_pis, target_vs = states.contiguous().cuda(), target_pis.contiguous().cuda(), target_vs.contiguous().cuda()
-
-                # compute output
-                out_pi, out_v = self(states)
-                l_pi = self.loss_pi(target_pis, out_pi)
-                l_v = self.loss_v(target_vs, out_v)
-                total_loss = l_pi + l_v
-
-                # record loss
-                pi_losses.update(l_pi.item(), states.size(0))
-                v_losses.update(l_v.item(), states.size(0))
-                t.set_postfix(Loss_pi=pi_losses, Loss_v=v_losses)
-
-                # compute gradient and do SGD step
-                optimizer.zero_grad()
-                total_loss.backward()
-                optimizer.step()
 
     def predict(self, state):
         """
@@ -327,33 +315,106 @@ class NeuralNetModel(nn.Module):
         # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
         return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
 
-    def loss_pi(self, targets, outputs):
-        return -torch.sum(targets * outputs) / targets.size()[0]
+class BlackJackMCTS(MCTS):
+    """
+    This class handles the MCTS tree.
+    https://github.com/suragnair/alpha-zero-general
+    """
 
-    def loss_v(self, targets, outputs):
-        return torch.sum((targets - outputs.view(-1)) ** 2) / targets.size()[0]
+    def __init__(self, game, player_nnet, dealer_nnet, args):
+        super().__init__(game, player_nnet, args)
+        self.dealer_nnet = dealer_nnet
 
-    def save_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
-        filepath = os.path.join(folder, filename)
-        if not os.path.exists(folder):
-            logging.debug("Checkpoint Directory does not exist! Making directory {}".format(folder))
-            os.mkdir(folder)
+    def search(self, state):
+        """
+        This function performs one iteration of MCTS. It is recursively called
+        till a leaf node is found. The action chosen at each node is one that
+        has the maximum upper confidence bound as in the paper.
+
+        Once a leaf node is found, the neural network is called to return an
+        initial policy P and a value v for the state. This value is propagated
+        up the search path. In case the leaf node is a terminal state, the
+        outcome is propagated up the search path. The values of Ns, Nsa, Qsa are
+        updated.
+
+        NOTE: the return values are the negative of the value of the current
+        state. This is done since v is in [-1,1] and if v is the value of a
+        state for the current player, then its value is -v for the other player.
+
+        Returns:
+            v: the negative of the value of the current state
+        """
+
+        s = self.game.state_to_string(state)
+        current_player = state[2]
+        v = self.game.get_game_ended(state, current_player)
+        if v != 0:
+            # terminal node
+            return -v
+
+        if s not in self.Ps:
+            # leaf node
+            state_np = self.game.to_neural_state(state)
+            state_in = state_np[0]
+            if current_player == 1:
+                self.Ps[s], v = self.nnet.predict(state_in)
+            else:
+                self.Ps[s], v = self.dealer_nnet.predict(state_in)
+            valids = self.game.get_valid_actions(state, current_player)
+            self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
+            sum_Ps_s = np.sum(self.Ps[s])
+            if sum_Ps_s > 0:
+                self.Ps[s] /= sum_Ps_s  # renormalize
+            else:
+                # if all valid moves were masked make all valid moves equally probable
+
+                # NB! All valid moves may be masked if either your NNet architecture is insufficient or you've get overfitting or something else.
+                # If you have got dozens or hundreds of these messages you should pay attention to your NNet and/or training process.   
+                logging.error("All valid moves were masked, doing a workaround.")
+                self.Ps[s] = self.Ps[s] + valids
+                self.Ps[s] /= np.sum(self.Ps[s])
+
+            self.Vs[s] = valids
+            self.Ns[s] = 0
+            return -v
+
+        valids = self.Vs[s]
+        cur_best = -float('inf')
+        best_act = -1
+
+        # pick the action with the highest upper confidence bound
+        for a in range(self.game.get_action_size()):
+            if valids[a]:
+                if (s, a) in self.Qsa:
+                    u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
+                            1 + self.Nsa[(s, a)])
+                else:
+                    u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
+
+                if u > cur_best:
+                    cur_best = u
+                    best_act = a
+
+        a = best_act
+        next_s = self.game.get_next_state(state, current_player, a)
+        next_player = next_s[2]
+        next_s = self.game.get_player_agnostic_state(next_s, next_player)
+
+        v = self.search(next_s)
+            
+        if (s, a) in self.Qsa:
+            self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
+            self.Nsa[(s, a)] += 1
+
         else:
-            logging.debug("Checkpoint Directory exists! ")
-        torch.save({
-            'state_dict': self.state_dict(),
-        }, filepath)
+            self.Qsa[(s, a)] = v
+            self.Nsa[(s, a)] = 1
 
-    def load_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
-        # https://github.com/pytorch/examples/blob/master/imagenet/main.py#L98
-        filepath = os.path.join(folder, filename)
-        if not os.path.exists(filepath):
-            raise ("No model in path {}".format(filepath))
-        map_location = None if self.args.cuda else 'cpu'
-        checkpoint = torch.load(filepath, map_location=map_location)
-        self.load_state_dict(checkpoint['state_dict'])
+        self.Ns[s] += 1
+        return -v
 
-class Agent():
+
+class BlackJackAgent():
     """
     This class executes the self-play + learning. It uses the functions defined
     in Game and NeuralNet. args are specified in main.py.
@@ -367,7 +428,7 @@ class Agent():
         self.dealer_nnet = self.nnet.__class__(self.game, nnargs)  # the dealer network
         self.dealer_pnet = self.nnet.__class__(self.game, nnargs)  # the previous dealer network
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)
+        self.mcts = BlackJackMCTS(self.game, self.nnet, self.dealer_nnet, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in load_train_examples()
 
@@ -430,7 +491,7 @@ class Agent():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for j in tqdm(range(self.args.numEps), desc="Self Play"):
-                    self.mcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)  # reset search tree
+                    self.mcts = BlackJackMCTS(self.game, self.nnet, self.dealer_nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.execute_episode()
 
                 # save the iteration examples to the history 
@@ -455,14 +516,14 @@ class Agent():
             self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
             self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
             self.dealer_pnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
-            pmcts = MCTS(self.game, self.pnet, self.dealer_pnet, self.args)
+            pmcts = BlackJackMCTS(self.game, self.pnet, self.dealer_pnet, self.args)
 
             player_examples = [(x[0],x[1],x[2]) for x in trainExamples if x[3]==1]
             dealer_examples = [(x[0],x[1],x[2]) for x in trainExamples if x[3]==-1]
             self.nnet.fit(player_examples)
             self.dealer_nnet.fit(dealer_examples)
 
-            nmcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)
+            nmcts = BlackJackMCTS(self.game, self.nnet, self.dealer_nnet, self.args)
 
             logging.info('PLAYING AGAINST PREVIOUS VERSION')
             arena = Arena(lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)),
@@ -480,73 +541,6 @@ class Agent():
                 self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.pth.tar')
                 self.save_train_examples(i - 1, best=True)
 
-    def get_checkpoint_file(self, iteration):
-        return 'checkpoint_' + str(iteration) + '.pth.tar'
-
-    def save_train_examples(self, iteration, best=False):
-        folder = self.args.checkpoint
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-        if best:
-            filename = os.path.join(folder, "best.pth.tar.examples")
-        else:
-            filename = os.path.join(folder, self.get_checkpoint_file(iteration) + ".examples")
-        with open(filename, "wb+") as f:
-            Pickler(f).dump(self.trainExamplesHistory)
-        f.closed
-
-    def load_train_examples(self, best=False):
-        if best:
-            folder = self.args.checkpoint
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-            modelFile = os.path.join(folder, "best.pth.tar")
-        else:
-            modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
-        examplesFile = modelFile + ".examples"
-        if not os.path.isfile(examplesFile):
-            logging.warning(f'File "{examplesFile}" with trainExamples not found!')
-            r = input("Continue? [y|n]")
-            if r != "y":
-                sys.exit()
-        else:
-            logging.info("File with trainExamples found. Loading it...")
-            with open(examplesFile, "rb") as f:
-                self.trainExamplesHistory = Unpickler(f).load()
-            logging.info('Loading done!')
-
-            # examples based on the model were already collected (loaded)
-            self.skipFirstSelfPlay = True
-
-args = dotdict({
-    'numIters': 10,
-    'numEps': 1,              # Number of complete self-play games to simulate during a new iteration.
-    'tempThreshold': 15,        #
-    'updateThreshold': 0.6,     # During arena playoff, new neural net will be accepted if threshold or more of games are won.
-    'maxlenOfQueue': 200000,    # Number of game examples to train the neural networks.
-    'numMCTSSims': 25,          # Number of games moves for MCTS to simulate.
-    'games_eval': 40,         # Number of games to play during arena play to determine if new net will be accepted.
-    'cpuct': 1,
-
-    'checkpoint': './temp/',
-    'load_model': False,
-    'load_folder_file': ('./temp','best.pth.tar'),
-    'numItersForTrainExamplesHistory': 20,
-    'log_level': 'INFO',
-    'test': False,
-    'play': False,
-    'games_play': 2,
-})
-
-nnargs = dotdict({
-    'lr': 0.001,
-    'dropout': 0.3,
-    'epochs': 10,
-    'batch_size': 64,
-    'cuda': False,
-    'num_channels': 512,
-})
-
 def main():
     loglevels = dict(DEBUG=logging.DEBUG, 
                      INFO=logging.INFO,
@@ -554,44 +548,44 @@ def main():
                      ERROR=logging.ERROR,
                      CRITICAL=logging.CRITICAL 
                      )
-    logging.basicConfig(level=loglevels[args.log_level])
+    logging.basicConfig(level=loglevels[args.args.log_level])
 
     game = BlackJack()
 
-    nnet = NeuralNetModel(game, nnargs)
+    nnet = BlackJackModel(game, args.nnargs)
 
-    if args.test:
+    if args.args.test:
         logging.info('Playing against self')
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        dealer_nnet = NeuralNetModel(game, nnargs)
+        dealer_nnet = BlackJackModel(game, args.nnargs)
         dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
-        mcts = MCTS(game, nnet, dealer_nnet, args)
+        mcts = BlackJackMCTS(game, nnet, dealer_nnet, args.args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
-        pwins, dwins, draws = arena.play_games(args.games_eval)
+        pwins, dwins, draws = arena.play_games(args.args.games_eval)
 
         logging.info('PLAYER/DEALER WINS : %d / %d ; DRAWS : %d' % (pwins, dwins, draws))
-    elif args.play:
+    elif args.args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        dealer_nnet = NeuralNetModel(game, nnargs)
+        dealer_nnet = BlackJackModel(game, args.nnargs)
         dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
-        mcts = MCTS(game, nnet, dealer_nnet, args)
+        mcts = BlackJackMCTS(game, nnet, dealer_nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = HumanBlackJackPlayer(game).play
         arena = Arena(hp, cp, game, display=BlackJack.display)
-        arena.play_games(args.games_play, verbose = True)
+        arena.play_games(args.args.games_play, verbose = True)
 
     else:
-        if args.load_model:
+        if args.args.load_model:
             logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.pth.tar')
             nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
         else:
             logging.warning('Not loading a checkpoint!')
 
-        c = Agent(game, nnet, args, nnargs)
+        c = BlackJackAgent(game, nnet, args.args, args.nnargs)
 
-        if args.load_model:
+        if args.args.load_model:
             logging.info("Loading 'trainExamples' from file...")
             c.load_train_examples(best=True)
 
@@ -599,32 +593,5 @@ def main():
         c.learn()
 
 if __name__ == "__main__":
-    # Set up argument parsing
-    parser = argparse.ArgumentParser(description="Find starting indices of concatenated substrings in a string.")
-    parser.add_argument("--load", action="store_true", help="load the last best checkpoint")
-    parser.add_argument("--iters", type=int, help="number of iterations", default=5)
-    parser.add_argument("--episodes", type=int, help="number of episodes/games for each iteration",default=1)
-    parser.add_argument("--epochs", type=int, help="number of epochs for training",default=10)
-    parser.add_argument("--channels", type=int, help="number of channels for the neural network",default=64)
-    parser.add_argument("--games_play", type=int, help="number of games to play",default=2)
-    parser.add_argument("--games_eval", type=int, help="number of games to eval",default=100)
-    parser.add_argument("--loglevel", type=str, help="logging level",default='INFO')
-    parser.add_argument("--test", action="store_true", help="test against self")
-    parser.add_argument("--play", action="store_true", help="play against human")
-    
-    # Parse the arguments
-    inargs = parser.parse_args()
-    
-    # Extract the input string and words
-    args.numIters = inargs.iters
-    args.numEps = inargs.episodes
-    args.load_model = inargs.load
-    args.log_level = inargs.loglevel
-    args.test = inargs.test
-    args.play = inargs.play
-    args.games_play = inargs.games_play
-    args.games_eval = inargs.games_eval
-    nnargs.epochs = inargs.epochs
-    nnargs.num_channels = inargs.channels
-
+    args.parse_args()
     main()

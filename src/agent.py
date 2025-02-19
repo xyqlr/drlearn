@@ -17,12 +17,12 @@ class Agent():
     https://github.com/suragnair/alpha-zero-general
     """
 
-    def __init__(self, game, nnet, args, nnargs=None):
+    def __init__(self, game, nnet, args, nnargs=None, mcts=None):
         self.game = game
         self.nnet = nnet
         self.pnet = self.nnet.__class__(self.game, nnargs)  # the competitor network
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet, self.nnet, self.args)
+        self.mcts = mcts if mcts is not None else MCTS(self.game, self.nnet, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in load_train_examples()
 
@@ -81,7 +81,7 @@ class Agent():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for j in tqdm(range(self.args.numEps), desc="Self Play"):
-                    self.mcts = MCTS(self.game, self.nnet, self.nnet, self.args)  # reset search tree
+                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.execute_episode()
 
                 # save the iteration examples to the history 
@@ -104,15 +104,15 @@ class Agent():
             # training new network, keeping a copy of the old one
             self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
             self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            pmcts = MCTS(self.game, self.pnet, self.pnet, self.args)
+            pmcts = MCTS(self.game, self.pnet, self.args)
 
             self.nnet.fit(trainExamples)
-            nmcts = MCTS(self.game, self.nnet, self.nnet, self.args)
+            nmcts = MCTS(self.game, self.nnet, self.args)
 
             log.info('PITTING AGAINST PREVIOUS VERSION')
             arena = Arena(lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)),
                           lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)), self.game)
-            pwins, nwins, draws = arena.play_games(self.args.arenaCompare)
+            pwins, nwins, draws = arena.play_games(self.args.games_eval)
 
             log.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
