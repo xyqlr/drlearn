@@ -110,7 +110,7 @@ class BlackJack:
             state_np, _, _, _ = self.to_neural_state((state0, state1, state[2], state[3]))
             if min(self._get_value(state_np)) > 21:
                 #reward = -1 if player == 1 else 1
-                return state0, state1, state[2], -player
+                return state0, state1, player, state[2]     #no change of player at the end of the game
             else:
                 return state0, state1, state[2], state[3]
         else:  # Stand
@@ -120,11 +120,11 @@ class BlackJack:
             dealer_sum = max(self._get_value(dealer_state))
             player_sum = max(self._get_value(player_state))
             if player_sum > dealer_sum:
-                return state0, state1, state[2], -player
+                return state0, state1, 1, state[2]
             elif player_sum == dealer_sum:
-                return state0, state1, state[2], 1e-4 #small value for tie
+                return state0, state1, 1e-4, state[2] #small value for tie
             else:
-                return state0, state1, state[2], player
+                return state0, state1, -1, state[2]
 
     def get_valid_actions(self, state, player):
         '''
@@ -183,7 +183,8 @@ class BlackJack:
             return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+dealer_str
         else:
             dealer_state, player_state, _, _ = self.to_neural_state(state)
-            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+''.join([str(v) for k,v in enumerate(dealer_state[:-1])])
+            dealer_value = max(self._get_value(dealer_state))
+            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+str(dealer_value)
 
     @staticmethod
     def display(state):
@@ -350,7 +351,7 @@ class BlackJackMCTS(MCTS):
         v = self.game.get_game_ended(state, current_player)
         if v != 0:
             # terminal node
-            return -v
+            return v*current_player
 
         if s not in self.Ps:
             # leaf node
@@ -376,7 +377,7 @@ class BlackJackMCTS(MCTS):
 
             self.Vs[s] = valids
             self.Ns[s] = 0
-            return -v
+            return v*current_player
 
         valids = self.Vs[s]
         cur_best = -float('inf')
@@ -398,7 +399,6 @@ class BlackJackMCTS(MCTS):
         a = best_act
         next_s = self.game.get_next_state(state, current_player, a)
         next_player = next_s[2]
-        next_s = self.game.get_player_agnostic_state(next_s, next_player)
 
         v = self.search(next_s)
             
@@ -411,10 +411,10 @@ class BlackJackMCTS(MCTS):
             self.Nsa[(s, a)] = 1
 
         self.Ns[s] += 1
-        return -v
+        return v*current_player
 
 
-class BlackJackAgent():
+class BlackJackAgent(Agent):
     """
     This class executes the self-play + learning. It uses the functions defined
     in Game and NeuralNet. args are specified in main.py.
@@ -451,17 +451,15 @@ class BlackJackAgent():
         trainExamples = []
         state = self.game.get_init_state()
         current_player = state[2]
-        episodeStep = 0
+        step = 0
 
         while True:
-            episodeStep += 1
-            temp = int(episodeStep < self.args.tempThreshold)
+            step += 1
+            temp = int(step < self.args.tempThreshold)
 
             pi = self.mcts.get_action_prob(state, temp=temp)
-            state_np = self.game.to_neural_state(state)
             if current_player == 1:
                 trainExamples.append([state[0], current_player, pi])
-                trainExamples.append([state[1], -current_player, pi])
             else:
                 trainExamples.append([state[1], current_player, pi])
                 trainExamples.append([state[0], -current_player, pi])
