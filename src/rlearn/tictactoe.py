@@ -7,8 +7,8 @@ import logging
 import argparse
 import time
 
-from nnet import NeuralNetModel
-import args
+from rlearn.nnet import NeuralNetModel
+from rlearn.args import args, nnargs, parse_args, run
 
 # Tic-Tac-Toe Environment
 class TicTacToe:
@@ -108,7 +108,7 @@ class TicTacToe:
                 l += [(newB.reshape(-1), list(newPi.ravel()) + [pi[-1]])]
         return l
 
-    def get_game_ended(self, state, player):
+    def get_game_ended(self, state, player, last_action=None):
         '''
         this returns the ending status of the game:
             1   : if the player wins
@@ -263,8 +263,9 @@ class TicTacToeModel(NeuralNetModel):
         return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
 
 if __name__ == "__main__":
-    args.parse_args()
+    nnargs.channels = 64     #set the default
+    parse_args()
     game = TicTacToe()
-    nnet = TicTacToeModel(game, args.nnargs)
+    nnet = TicTacToeModel(game, nnargs)
     human_player = HumanTicTacToePlayer(game)
-    args.run(game, nnet, human_player)
+    run(game, nnet, human_player)

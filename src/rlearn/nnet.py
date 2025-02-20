@@ -8,7 +8,7 @@ import time
 import os
 from tqdm import tqdm
 
-from utils import AverageMeter
+from rlearn.utils import AverageMeter
 
 class NeuralNetModel(nn.Module):
     def __init__(self, game, args):

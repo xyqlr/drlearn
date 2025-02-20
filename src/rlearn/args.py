@@ -8,11 +8,11 @@ import time
 import os
 from tqdm import tqdm
 
-from utils import dotdict
-from arena import Arena
-from mcts import MCTS
-from agent import Agent
-from nnet import NeuralNetModel
+from rlearn.utils import dotdict
+from rlearn.arena import Arena
+from rlearn.mcts import MCTS
+from rlearn.agent import Agent
+from rlearn.nnet import NeuralNetModel
 
 args = dotdict({
     'numIters': 10,
@@ -72,7 +72,8 @@ def parse_args():
     args.games_eval = inargs.games_eval
 
     nnargs.epochs = inargs.epochs
-    nnargs.num_channels = inargs.channels
+    if inargs.channels:
+        nnargs.num_channels = inargs.channels
 
 def run(game, nnet, human_player, agent=None):
     loglevels = dict(DEBUG=logging.DEBUG, 

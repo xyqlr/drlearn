@@ -132,9 +132,8 @@ class Arena():
         """
         current_player = 1
         state = start_state
-
         ended = False
-        while not ended:
+        while ended==0:
             action = player_func(state)
 
             valids = self.game.get_valid_actions(state, current_player)
@@ -146,9 +145,9 @@ class Arena():
 
             state = self.game.get_next_state(state, current_player, action)
             current_player = state[2]
-            ended = state[3]!=0
+            ended = state[3]
 
-        return state[3]
+        return ended
 
     def eval_games(self, num):
         """

@@ -7,8 +7,8 @@ from pickle import Pickler, Unpickler
 import os
 import sys
 
-from mcts import MCTS
-from arena import Arena
+from rlearn.mcts import MCTS
+from rlearn.arena import Arena
 
 class Agent():
     """

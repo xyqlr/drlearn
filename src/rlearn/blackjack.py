@@ -16,12 +16,12 @@ from random import shuffle
 from collections import deque
 from pickle import Pickler, Unpickler
 
-from utils import AverageMeter, dotdict
-from mcts import MCTS, EPS
-from arena import Arena
-from nnet import NeuralNetModel
-from agent import Agent
-import args
+from rlearn.utils import AverageMeter, dotdict
+from rlearn.mcts import MCTS, EPS
+from rlearn.arena import Arena
+from rlearn.nnet import NeuralNetModel
+from rlearn.agent import Agent
+from rlearn.args import args, nnargs, parse_args, run
 
 # Custom Blackjack Environment
 class BlackJack:
@@ -77,11 +77,11 @@ class BlackJack:
             player, dealer = 1, 0
         player_state = np.zeros(self.n+1, dtype=int)
         for card in state[player]:
-            player_state[self.index_map[card]] += 1  # Cards are 1-indexed (1 to 13)
-        player_state[self.n] = self.index_map[state[dealer][0]] #the first card of the dealer
+            player_state[self.index_map[card]] += 1  
+        player_state[self.n] = self.index_map[state[dealer][0]]+1 #the first card of the dealer
         dealer_state = np.zeros(self.n+1, dtype=int)
         for card in state[dealer]:
-            dealer_state[self.index_map[card]] += 1  # Cards are 1-indexed (1 to 13)
+            dealer_state[self.index_map[card]] += 1  
         dealer_state[self.n] = max(self._get_value(player_state))
         return (player_state, dealer_state, state[2], state[3]) if current_player == 1 else (dealer_state, player_state, state[2], state[3])
 
@@ -145,7 +145,7 @@ class BlackJack:
     def get_symmetries(self, state, pi):
         return [state, pi]
 
-    def get_game_ended(self, state, player):
+    def get_game_ended(self, state, player, last_action):
         '''
         this returns the ending status of the game:
             1   : if the player wins
@@ -167,6 +167,8 @@ class BlackJack:
             dealer_sum = max(dealer_value)
             if dealer_sum < 17:
                 return 0    #not ended
+            if last_action != 1: # only if dealer stands
+                return 0
             player_sum = max(self._get_value(player_state))
             if player_sum > dealer_sum:
                 return 1
@@ -178,7 +180,7 @@ class BlackJack:
     def state_to_string(self, state):
         current_player = state[2]
         if current_player == 1:
-            dealer_str = str(self.index_map[state[1][0]])
+            dealer_str = str(self.index_map[state[1][0]]+1)    #the first card of the dealer
             player_state, _, _, _ = self.to_neural_state(state)
             return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+dealer_str
         else:
@@ -348,10 +350,10 @@ class BlackJackMCTS(MCTS):
 
         s = self.game.state_to_string(state)
         current_player = state[2]
-        v = self.game.get_game_ended(state, current_player)
+        v = self.game.get_game_ended(state, current_player, self.last_action)
         if v != 0:
             # terminal node
-            return v*current_player
+            return v
 
         if s not in self.Ps:
             # leaf node
@@ -377,7 +379,7 @@ class BlackJackMCTS(MCTS):
 
             self.Vs[s] = valids
             self.Ns[s] = 0
-            return v*current_player
+            return v
 
         valids = self.Vs[s]
         cur_best = -float('inf')
@@ -398,8 +400,7 @@ class BlackJackMCTS(MCTS):
 
         a = best_act
         next_s = self.game.get_next_state(state, current_player, a)
-        next_player = next_s[2]
-
+        self.last_action = a
         v = self.search(next_s)
             
         if (s, a) in self.Qsa:
@@ -411,7 +412,7 @@ class BlackJackMCTS(MCTS):
             self.Nsa[(s, a)] = 1
 
         self.Ns[s] += 1
-        return v*current_player
+        return v
 
 
 class BlackJackAgent(Agent):
@@ -546,13 +547,13 @@ def main():
                      ERROR=logging.ERROR,
                      CRITICAL=logging.CRITICAL 
                      )
-    logging.basicConfig(level=loglevels[args.args.log_level])
+    logging.basicConfig(level=loglevels[args.log_level])
 
     game = BlackJack()
 
-    nnet = BlackJackModel(game, args.nnargs)
+    nnet = BlackJackModel(game, nnargs)
 
-    if args.args.test:
+    if args.test:
         logging.info('Playing against self')
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
         dealer_nnet = BlackJackModel(game, args.nnargs)
@@ -560,10 +561,10 @@ def main():
         mcts = BlackJackMCTS(game, nnet, dealer_nnet, args.args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
-        pwins, dwins, draws = arena.play_games(args.args.games_eval)
+        pwins, dwins, draws = arena.play_games(args.games_eval)
 
         logging.info('PLAYER/DEALER WINS : %d / %d ; DRAWS : %d' % (pwins, dwins, draws))
-    elif args.args.play:
+    elif args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
         dealer_nnet = BlackJackModel(game, args.nnargs)
@@ -572,18 +573,18 @@ def main():
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = HumanBlackJackPlayer(game).play
         arena = Arena(hp, cp, game, display=BlackJack.display)
-        arena.play_games(args.args.games_play, verbose = True)
+        arena.play_games(args.games_play, verbose = True)
 
     else:
-        if args.args.load_model:
+        if args.load_model:
             logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.pth.tar')
             nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
         else:
             logging.warning('Not loading a checkpoint!')
 
-        c = BlackJackAgent(game, nnet, args.args, args.nnargs)
+        c = BlackJackAgent(game, nnet, args, nnargs)
 
-        if args.args.load_model:
+        if args.load_model:
             logging.info("Loading 'trainExamples' from file...")
             c.load_train_examples(best=True)
 
@@ -591,5 +592,6 @@ def main():
         c.learn()
 
 if __name__ == "__main__":
-    args.parse_args()
+    nnargs.channels = 512     #set the default
+    parse_args()
     main()
