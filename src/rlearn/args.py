@@ -49,7 +49,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Find starting indices of concatenated substrings in a string.")
     parser.add_argument("--load", action="store_true", help="load the last best checkpoint")
     parser.add_argument("--iters", type=int, help="number of iterations", default=5)
-    parser.add_argument("--episodes", type=int, help="number of episodes/games for each iteration",default=1)
+    parser.add_argument("--episodes", type=int, help="number of episodes/games for each iteration")
     parser.add_argument("--epochs", type=int, help="number of epochs for training",default=10)
     parser.add_argument("--channels", type=int, help="number of channels for the neural network",default=64)
     parser.add_argument("--loglevel", type=str, help="logging level",default='INFO')
@@ -63,7 +63,8 @@ def parse_args():
     
     # Extract the input string and words
     args.numIters = inargs.iters
-    args.numEps = inargs.episodes
+    if inargs.episodes:
+        args.numEps = inargs.episodes
     args.load_model = inargs.load
     args.log_level = inargs.loglevel
     args.eval = inargs.eval

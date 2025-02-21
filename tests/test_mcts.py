@@ -8,5 +8,5 @@ def test_mcts():
     nnet = BlackJackModel(game, nnargs)
     dealer_nnet = BlackJackModel(game, nnargs)
     mcts = BlackJackMCTS(game, nnet, dealer_nnet, args)
-    state = (['J','A'], ['10', '8'], -1, 0)
+    state = (['J','K'], ['10', '8'], -1, 0)
     probs = mcts.get_action_prob(state) 

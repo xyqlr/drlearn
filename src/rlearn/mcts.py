@@ -19,7 +19,6 @@ class MCTS():
         self.Ns = {}  # stores #times board s was visited
         self.Ps = {}  # stores initial policy (returned by neural net)
         self.Vs = {}  # stores game.get_valid_actions for board s
-        self.last_action = None
 
     def get_action_prob(self, state, temp=1):
         """
@@ -31,7 +30,7 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for i in range(self.args.numMCTSSims):
-            self.last_action = None
+            self.count = 0
             self.search(state)
 
         s = self.game.state_to_string(state)

@@ -108,7 +108,7 @@ class TicTacToe:
                 l += [(newB.reshape(-1), list(newPi.ravel()) + [pi[-1]])]
         return l
 
-    def get_game_ended(self, state, player, last_action=None):
+    def get_game_ended(self, state, player):
         '''
         this returns the ending status of the game:
             1   : if the player wins
@@ -116,17 +116,7 @@ class TicTacToe:
             0   : a tie
             1e-4: game not ended
         '''
-        b = np.copy(state[0]).reshape(self.n, self.n)
-        if self._is_win(b, player):
-            reward = 1
-        elif self._is_win(b, -player):
-            reward = -1
-        elif len(list(zip(*np.where(b == 0))))!=0:
-            reward = 0
-        else:
-            # draw has a very little value 
-            reward = 1e-4
-        return reward 
+        return state[3] 
 
     def state_to_string(self, state):
         '''

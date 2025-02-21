@@ -78,7 +78,7 @@ class BlackJack:
         player_state = np.zeros(self.n+1, dtype=int)
         for card in state[player]:
             player_state[self.index_map[card]] += 1  
-        player_state[self.n] = self.index_map[state[dealer][0]]+1 #the first card of the dealer
+        player_state[self.n] = self.card_values[self.index_map[state[dealer][0]]] #the first card of the dealer
         dealer_state = np.zeros(self.n+1, dtype=int)
         for card in state[dealer]:
             dealer_state[self.index_map[card]] += 1  
@@ -110,9 +110,9 @@ class BlackJack:
             state_np, _, _, _ = self.to_neural_state((state0, state1, state[2], state[3]))
             if min(self._get_value(state_np)) > 21:
                 #reward = -1 if player == 1 else 1
-                return state0, state1, player, state[2]     #no change of player at the end of the game
+                return state0, state1, state[2], -player     #no change of player at the end of the game
             else:
-                return state0, state1, state[2], state[3]
+                return state0, state1, state[2], 0
         else:  # Stand
             if player == 1:
                 return state1, state0, -1, 0    #dealer's turn
@@ -120,11 +120,11 @@ class BlackJack:
             dealer_sum = max(self._get_value(dealer_state))
             player_sum = max(self._get_value(player_state))
             if player_sum > dealer_sum:
-                return state0, state1, 1, state[2]
+                return state0, state1, state[2], 1
             elif player_sum == dealer_sum:
-                return state0, state1, 1e-4, state[2] #small value for tie
+                return state0, state1, state[2], 1e-4 #small value for tie
             else:
-                return state0, state1, -1, state[2]
+                return state0, state1, state[2], -1
 
     def get_valid_actions(self, state, player):
         '''
@@ -134,9 +134,18 @@ class BlackJack:
         current_player = state[2]
         if current_player == -1: #dealer
             dealer_state, player_state, _, _ = self.to_neural_state(state)
-            dealer_sum = max(self._get_value(dealer_state))
-            if dealer_sum < 17:
-                valids[1] = 0            
+            dealer_value = self._get_value(dealer_state)
+            if max(dealer_value) < 17:
+                valids[1] = 0
+            elif min(dealer_value) > 21:
+                valids[0] = 0
+                valids[1] = 0
+        else:            
+            player_state, dealer_state, _, _ = self.to_neural_state(state)
+            player_value = self._get_value(player_state)
+            if min(player_value) > 21:
+                valids[0] = 0
+                valids[1] = 0
         return np.array(valids)
 
     def get_player_agnostic_state(self, state, player):
@@ -145,7 +154,7 @@ class BlackJack:
     def get_symmetries(self, state, pi):
         return [state, pi]
 
-    def get_game_ended(self, state, player, last_action):
+    def get_game_ended(self, state, player):
         '''
         this returns the ending status of the game:
             1   : if the player wins
@@ -153,34 +162,12 @@ class BlackJack:
             0   : a tie
             1e-4: game not ended
         '''
-        if player == 1:
-            player_state, _, _, _ = self.to_neural_state(state)
-            player_value = self._get_value(player_state)
-            if min(player_value) > 21:
-                return -1
-            return 0        #not ended
-        else:
-            dealer_state, player_state, _, _ = self.to_neural_state(state)
-            dealer_value = self._get_value(dealer_state)
-            if min(dealer_value) > 21:
-                return 1
-            dealer_sum = max(dealer_value)
-            if dealer_sum < 17:
-                return 0    #not ended
-            if last_action != 1: # only if dealer stands
-                return 0
-            player_sum = max(self._get_value(player_state))
-            if player_sum > dealer_sum:
-                return 1
-            elif player_sum == dealer_sum:
-                return 1e-4 #small value for tie
-            else:
-                return -1
+        return state[3]
 
     def state_to_string(self, state):
         current_player = state[2]
         if current_player == 1:
-            dealer_str = str(self.index_map[state[1][0]]+1)    #the first card of the dealer
+            dealer_str = str(self.card_values[self.index_map[state[1][0]]])    #the first card of the dealer
             player_state, _, _, _ = self.to_neural_state(state)
             return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+dealer_str
         else:
@@ -190,7 +177,7 @@ class BlackJack:
 
     @staticmethod
     def display(state):
-        player_state, dealer_state, current_player, _ = state
+        player_state, dealer_state, _, current_player = state
         if current_player == -1:
             dealer_state, player_state, _, _ = state
             dealer_str = ','.join(x for x in dealer_state)
@@ -348,9 +335,14 @@ class BlackJackMCTS(MCTS):
             v: the negative of the value of the current state
         """
 
+        self.count+=1
         s = self.game.state_to_string(state)
         current_player = state[2]
-        v = self.game.get_game_ended(state, current_player, self.last_action)
+        v = self.game.get_game_ended(state, current_player)
+        if self.count >= 20:
+            print(f"s={s}, v={v}, state={state}, current_player={current_player}, last_action={self.last_action}, last_player={self.last_player}")
+            raise RecursionError("something wrong here")
+        
         if v != 0:
             # terminal node
             return v
@@ -377,11 +369,10 @@ class BlackJackMCTS(MCTS):
                 self.Ps[s] = self.Ps[s] + valids
                 self.Ps[s] /= np.sum(self.Ps[s])
 
-            self.Vs[s] = valids
             self.Ns[s] = 0
             return v
 
-        valids = self.Vs[s]
+        valids = self.game.get_valid_actions(state, current_player)
         cur_best = -float('inf')
         best_act = -1
 
@@ -400,7 +391,6 @@ class BlackJackMCTS(MCTS):
 
         a = best_act
         next_s = self.game.get_next_state(state, current_player, a)
-        self.last_action = a
         v = self.search(next_s)
             
         if (s, a) in self.Qsa:
@@ -460,10 +450,12 @@ class BlackJackAgent(Agent):
 
             pi = self.mcts.get_action_prob(state, temp=temp)
             if current_player == 1:
-                trainExamples.append([state[0], current_player, pi])
+                state0, state1, _, _ = self.game.to_neural_state(state)
+                trainExamples.append([state0, current_player, pi])
             else:
-                trainExamples.append([state[1], current_player, pi])
-                trainExamples.append([state[0], -current_player, pi])
+                state0, state1, _, _ = self.game.to_neural_state(state)
+                trainExamples.append([state0, current_player, pi])
+                trainExamples.append([state1, -current_player, pi])
 
             action = np.random.choice(len(pi), p=pi)
             state= self.game.get_next_state(state, current_player, action)
@@ -593,5 +585,7 @@ def main():
 
 if __name__ == "__main__":
     nnargs.channels = 512     #set the default
+    args.numMCTSSims=50
+    args.numEps=100
     parse_args()
     main()

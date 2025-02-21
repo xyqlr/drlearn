@@ -44,6 +44,7 @@ class Agent():
         """
         trainExamples = []
         state = self.game.get_init_state()
+        last_player = -1
         current_player = 1
         step = 0
 
