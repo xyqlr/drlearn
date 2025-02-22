@@ -26,7 +26,7 @@ args = dotdict({
 
     'checkpoint': './temp/',
     'load_model': False,
-    'load_folder_file': ('./temp','best.pth.tar'),
+    'load_folder_file': ('./temp','best.tar'),
     'numItersForTrainExamplesHistory': 20,
     'log_level': 'INFO',
     'test': False,
@@ -87,7 +87,7 @@ def main(game, nnet, human_player, agent=None):
 
     if args.eval:
         logging.info('Playing against self')
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
+        nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
         mcts = MCTS(game, nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
@@ -96,17 +96,17 @@ def main(game, nnet, human_player, agent=None):
         logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
     elif args.play:
         logging.info("Let's play!")
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
+        nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
         mcts = MCTS(game, nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
-        hp = human_player(game).play
+        hp = human_player.play
         arena = Arena(cp, hp, game, display=game.display)
         arena.play_games(args.games_play, verbose = True)
 
     else:
         if args.load_model:
-            logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.pth.tar')
-            nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
+            logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.tar')
+            nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
         else:
             logging.warning('Not loading a checkpoint!')
 

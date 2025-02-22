@@ -43,7 +43,8 @@ class Arena():
             if hasattr(player, "startGame"):
                 player.startGame()
 
-        while self.game.get_game_ended(state, current_player) == 0:
+        ended = False
+        while ended==0:
             it += 1
             if verbose:
                 assert self.display
@@ -66,22 +67,25 @@ class Arena():
 
             state = self.game.get_next_state(state, current_player, action)
             current_player = state[2]
+            ended = self.game.get_game_ended(state, current_player)
 
         for player in players[0], players[2]:
             if hasattr(player, "endGame"):
                 player.endGame()
 
+        reward = ended*current_player
+
         if verbose:
             assert self.display
-            logging.debug("Game over: Turn ", str(it), "Result ", str(state[3]))
-            res = current_player*self.game.get_game_ended(state, current_player)
-            if res==1:
+            logging.debug("Game over: Turn ", str(it), "Result ", str(reward))
+            self.display(state)
+            if reward==1:
                 print("Player won!")
-            elif res==-1:
+            elif reward==-1:
                 print("The other won!")
             else:
                 print("It is a tie")
-        return current_player*self.game.get_game_ended(state, current_player) 
+        return reward 
 
     def play_games(self, num, verbose=False):
         """
@@ -147,7 +151,7 @@ class Arena():
             current_player = state[2]
             ended = state[3]
 
-        return ended*current_player
+        return ended if current_player==1 else -ended
 
     def eval_games(self, num):
         """

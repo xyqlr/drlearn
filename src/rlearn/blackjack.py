@@ -24,10 +24,15 @@ from rlearn.nnet import NeuralNetModel
 from rlearn.agent import Agent
 from rlearn.args import args, nnargs, parse_args, main
 
+ACTION_HIT   = 0
+ACTION_STAND = 1
+PLAYER = 1
+DEALER = -1
+
 # Custom Blackjack Environment
 class BlackJack(Game):
     def __init__(self):
-        super().__init__(player_agnostic_state=False, symmetry=False)
+        super().__init__(alternate_turn=False)
         self.n = 13
         self.reset()
 
@@ -93,8 +98,8 @@ class BlackJack(Game):
     def get_action_size(self):
         '''
         the number of actions: 2
-            action 0: for hit, meaning wanting more cards
-            action 1: for stand, no more cards for the player and dealer plays next
+            ACTION_HIT  : hit for more cards
+            ACTION_STAND: stand, no more cards for the player and dealer plays next
         '''
         return 2
 
@@ -106,7 +111,7 @@ class BlackJack(Game):
         '''
         state0 = copy.copy(state[0])
         state1 = copy.copy(state[1])
-        if action == 0:  # Hit
+        if action == ACTION_HIT:  # Hit
             card = self._deal_next_card(state)
             state0.append(card)
             state_np, _, _, _ = self.to_neural_state((state0, state1, state[2], state[3]))
@@ -258,10 +263,7 @@ class HumanBlackJackPlayer():
         str += f"Enter 1 for stand" if valid[1] else f""
         print(str)
         while True: 
-            # Python 3.x
             a = input()
-            # Python 2.x 
-            # a = raw_input()
             a = int(a)
             if valid[a]:
                 break
@@ -500,10 +502,10 @@ class BlackJackAgent(Agent):
             shuffle(trainExamples)
 
             # training new network, keeping a copy of the old one
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
-            self.dealer_pnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
+            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
+            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
+            self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='tempd.tar')
+            self.dealer_pnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.tar')
             pmcts = BlackJackMCTS(self.game, self.pnet, self.dealer_pnet, self.args)
 
             player_examples = [(x[0],x[1],x[2]) for x in trainExamples if x[3]==1]
@@ -520,20 +522,20 @@ class BlackJackAgent(Agent):
 
             #save the first iteration models as the base
             if i==1:
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
-                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.pth.tar')
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.tar')
+                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.tar')
                 self.save_train_examples(i-1, best=True)
 
 
             logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
                 logging.info('REJECTING NEW MODEL')
-                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-                self.dealer_nnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.pth.tar')
+                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
+                self.dealer_nnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.tar')
             else:
                 logging.info('ACCEPTING NEW MODEL')
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
-                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.pth.tar')
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.tar')
+                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.tar')
                 self.save_train_examples(i - 1, best=True)
 
 def main():
@@ -551,9 +553,9 @@ def main():
 
     if args.eval:
         logging.info('Playing against self')
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
+        nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
         dealer_nnet = BlackJackModel(game, nnargs)
-        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
+        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.tar')
         mcts = BlackJackMCTS(game, nnet, dealer_nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
@@ -562,9 +564,9 @@ def main():
         logging.info('PLAYER/DEALER WINS : %d / %d ; DRAWS : %d' % (pwins, dwins, draws))
     elif args.play:
         logging.info("Let's play!")
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
+        nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
         dealer_nnet = BlackJackModel(game, nnargs)
-        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
+        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.tar')
         mcts = BlackJackMCTS(game, nnet, dealer_nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = HumanBlackJackPlayer(game).play
@@ -573,8 +575,8 @@ def main():
 
     else:
         if args.load_model:
-            logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.pth.tar')
-            nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
+            logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.tar')
+            nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
         else:
             logging.warning('Not loading a checkpoint!')
 

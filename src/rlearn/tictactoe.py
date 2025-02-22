@@ -118,7 +118,17 @@ class TicTacToe(Game):
             0   : a tie
             1e-4: game not ended
         '''
-        return state[3] 
+        b = np.copy(state[0]).reshape(self.n, self.n)
+        if self._is_win(b, player):
+            reward = 1
+        elif self._is_win(b, -player):
+            reward = -1
+        elif len(list(zip(*np.where(b == 0))))!=0:
+            reward = 0
+        else:
+            # draw has a very little value 
+            reward = 1e-4
+        return reward 
 
     def state_to_string(self, state):
         '''
@@ -178,10 +188,7 @@ class HumanTicTacToePlayer():
             if valid[i]:
                 print(int(i/self.game.n), int(i%self.game.n))
         while True: 
-            # Python 3.x
             a = input()
-            # Python 2.x 
-            # a = raw_input()
 
             x,y = [int(x) for x in a.split(' ')]
             a = self.game.n * x + y if x!= -1 else self.game.n ** 2
@@ -256,6 +263,7 @@ class TicTacToeModel(NeuralNetModel):
 
 if __name__ == "__main__":
     nnargs.channels = 64     #set the default
+    args.numEps=10
     parse_args()
     game = TicTacToe()
     nnet = TicTacToeModel(game, nnargs)

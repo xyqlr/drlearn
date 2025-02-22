@@ -4,10 +4,9 @@ This class need be subclassed by the specific game.
 '''
 
 class Game:
-    def __init__(self, player_agnostic_state=True, symmetry=True):
-        self.player_agnostic_state = player_agnostic_state
-        self.symmetry = symmetry
-
+    def __init__(self, alternate_turn=True):
+        self.alternate_turn = alternate_turn
+        
     def get_init_state(self):
         '''
         state:  (player_state, opppnent_state, current_player, reward)
@@ -28,13 +27,7 @@ class Game:
         '''
         input state: (player_state, opponent_state, current_player, reward)
         output state: (player_neural_state, opponent_neural_state, current_player, reward)
-            a neural state is a numpy array of dimension 14, 
-                the first 13 store the count of each card in a hand
-                the last element is different fro the player and the opponent
-                    it is the first card of the opponent for player_neural_state,
-                    it is the the value of the cards of the player for opponent_neural_state.
-            player_neural_state: [num As, num 2s, ..., num Ks, the first card of the opponent]
-            opponent_neural_state: [num As, num 2s, ..., num Ks, the total value of the player]
+            a neural state is a numpy array which can be fed to the neural network model
         if the game has player agnostic state, the opponent_state is the same as the player state
         '''
         pass
@@ -44,7 +37,8 @@ class Game:
 
     def get_action_size(self):
         '''
-        the number of actions denoted as 0 to N-1, where N is the number of actions 
+        the number of actions.
+        each acction is denoted as 0 to N-1, where N is the number of actions 
         '''
         pass
 

@@ -103,36 +103,40 @@ class Agent():
             shuffle(trainExamples)
 
             # training new network, keeping a copy of the old one
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
+            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
+            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
             pmcts = MCTS(self.game, self.pnet, self.args)
 
             self.nnet.fit(trainExamples)
             nmcts = MCTS(self.game, self.nnet, self.args)
 
-            log.info('PITTING AGAINST PREVIOUS VERSION')
+            log.info('PLAYING AGAINST PREVIOUS VERSION')
             arena = Arena(lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)),
                           lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)), self.game)
             pwins, nwins, draws = arena.play_games(self.args.games_eval)
 
+            if i==1:
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.tar')
+                self.save_train_examples(i-1, best=True)
+
             log.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
                 log.info('REJECTING NEW MODEL')
-                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
+                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
             else:
                 log.info('ACCEPTING NEW MODEL')
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.tar')
                 self.save_train_examples(i - 1, best=True)
 
     def get_checkpoint_file(self, iteration):
-        return 'checkpoint_' + str(iteration) + '.pth.tar'
+        return 'checkpoint_' + str(iteration) + '.tar'
 
     def save_train_examples(self, iteration, best=False):
         folder = self.args.checkpoint
         if not os.path.exists(folder):
             os.makedirs(folder)
         if best:
-            filename = os.path.join(folder, self.game.__class__.__name__+".best.pth.tar.examples")
+            filename = os.path.join(folder, self.game.__class__.__name__+".best.tar.examples")
         else:
             filename = os.path.join(folder, self.get_checkpoint_file(iteration) + ".examples")
         with open(filename, "wb+") as f:
@@ -144,7 +148,7 @@ class Agent():
             folder = self.args.checkpoint
             if not os.path.exists(folder):
                 os.makedirs(folder)
-            modelFile = os.path.join(folder, self.game.__class__.__name__+".best.pth.tar")
+            modelFile = os.path.join(folder, self.game.__class__.__name__+".best.tar")
         else:
             modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
         examplesFile = modelFile + ".examples"
