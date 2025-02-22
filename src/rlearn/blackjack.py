@@ -16,16 +16,18 @@ from random import shuffle
 from collections import deque
 from pickle import Pickler, Unpickler
 
+from rlearn.game import Game
 from rlearn.utils import AverageMeter, dotdict
 from rlearn.mcts import MCTS, EPS
 from rlearn.arena import Arena
 from rlearn.nnet import NeuralNetModel
 from rlearn.agent import Agent
-from rlearn.args import args, nnargs, parse_args, run
+from rlearn.args import args, nnargs, parse_args, main
 
 # Custom Blackjack Environment
-class BlackJack:
+class BlackJack(Game):
     def __init__(self):
+        super().__init__(player_agnostic_state=False, symmetry=False)
         self.n = 13
         self.reset()
 
@@ -169,11 +171,11 @@ class BlackJack:
         if current_player == 1:
             dealer_str = str(self.card_values[self.index_map[state[1][0]]])    #the first card of the dealer
             player_state, _, _, _ = self.to_neural_state(state)
-            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+dealer_str
+            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+dealer_str+":"+str(current_player) #add current_play to avoid same state when switching to dealer
         else:
             dealer_state, player_state, _, _ = self.to_neural_state(state)
             dealer_value = max(self._get_value(dealer_state))
-            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+str(dealer_value)
+            return ''.join([str(v) for k,v in enumerate(player_state[:-1])])+":"+str(dealer_value)+":"+str(current_player)
 
     @staticmethod
     def display(state):
@@ -449,13 +451,8 @@ class BlackJackAgent(Agent):
             temp = int(step < self.args.tempThreshold)
 
             pi = self.mcts.get_action_prob(state, temp=temp)
-            if current_player == 1:
-                state0, state1, _, _ = self.game.to_neural_state(state)
-                trainExamples.append([state0, current_player, pi])
-            else:
-                state0, state1, _, _ = self.game.to_neural_state(state)
-                trainExamples.append([state0, current_player, pi])
-                trainExamples.append([state1, -current_player, pi])
+            state0, state1, _, _ = self.game.to_neural_state(state)
+            trainExamples.append([state0, current_player, pi])
 
             action = np.random.choice(len(pi), p=pi)
             state= self.game.get_next_state(state, current_player, action)
@@ -463,7 +460,7 @@ class BlackJackAgent(Agent):
             r = state[3]
 
             if r != 0:
-                return [(x[0], x[2], r *x[1], x[1]) for x in trainExamples]
+                return [(x[0], x[2], r*x[1], x[1]) for x in trainExamples]
 
     def learn(self):
         """
@@ -521,6 +518,13 @@ class BlackJackAgent(Agent):
                           lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)), self.game)
             nwins, pwins, draws = arena.eval_games(self.args.games_eval)
 
+            #save the first iteration models as the base
+            if i==1:
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
+                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.pth.tar')
+                self.save_train_examples(i-1, best=True)
+
+
             logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
                 logging.info('REJECTING NEW MODEL')
@@ -545,12 +549,12 @@ def main():
 
     nnet = BlackJackModel(game, nnargs)
 
-    if args.test:
+    if args.eval:
         logging.info('Playing against self')
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        dealer_nnet = BlackJackModel(game, args.nnargs)
+        dealer_nnet = BlackJackModel(game, nnargs)
         dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
-        mcts = BlackJackMCTS(game, nnet, dealer_nnet, args.args)
+        mcts = BlackJackMCTS(game, nnet, dealer_nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
         pwins, dwins, draws = arena.play_games(args.games_eval)
@@ -559,7 +563,7 @@ def main():
     elif args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth.tar')
-        dealer_nnet = BlackJackModel(game, args.nnargs)
+        dealer_nnet = BlackJackModel(game, nnargs)
         dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth.tar')
         mcts = BlackJackMCTS(game, nnet, dealer_nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))

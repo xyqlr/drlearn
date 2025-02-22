@@ -76,7 +76,7 @@ def parse_args():
     if inargs.channels:
         nnargs.num_channels = inargs.channels
 
-def run(game, nnet, human_player, agent=None):
+def main(game, nnet, human_player, agent=None):
     loglevels = dict(DEBUG=logging.DEBUG, 
                      INFO=logging.INFO,
                      WARNING=logging.WARNING,

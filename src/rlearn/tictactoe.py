@@ -7,12 +7,14 @@ import logging
 import argparse
 import time
 
+from rlearn.game import Game
 from rlearn.nnet import NeuralNetModel
-from rlearn.args import args, nnargs, parse_args, run
+from rlearn.args import args, nnargs, parse_args, main
 
 # Tic-Tac-Toe Environment
-class TicTacToe:
+class TicTacToe(Game):
     def __init__(self, n=3):
+        super().__init__()
         self.n = n
 
     def get_init_state(self):
@@ -258,4 +260,4 @@ if __name__ == "__main__":
     game = TicTacToe()
     nnet = TicTacToeModel(game, nnargs)
     human_player = HumanTicTacToePlayer(game)
-    run(game, nnet, human_player)
+    main(game, nnet, human_player)
