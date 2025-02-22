@@ -111,8 +111,9 @@ class BlackJack(Game):
             state0.append(card)
             state_np, _, _, _ = self.to_neural_state((state0, state1, state[2], state[3]))
             if min(self._get_value(state_np)) > 21:
-                #reward = 1 if player == 1 else -1: reward is from the dealder's perspective
-                return state0, state1, state[2], player     #no change of player at the end of the game
+                #reward is from the current player's perspective
+                reward = -player if player == 1 else player
+                return state0, state1, state[2], reward     #no change of player at the end of the game
             else:
                 return state0, state1, state[2], 0
         else:  # Stand
