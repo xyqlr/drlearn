@@ -111,8 +111,8 @@ class BlackJack(Game):
             state0.append(card)
             state_np, _, _, _ = self.to_neural_state((state0, state1, state[2], state[3]))
             if min(self._get_value(state_np)) > 21:
-                #reward = -1 if player == 1 else 1
-                return state0, state1, state[2], -player     #no change of player at the end of the game
+                #reward = 1 if player == 1 else -1: reward is from the dealder's perspective
+                return state0, state1, state[2], player     #no change of player at the end of the game
             else:
                 return state0, state1, state[2], 0
         else:  # Stand
@@ -337,13 +337,9 @@ class BlackJackMCTS(MCTS):
             v: the negative of the value of the current state
         """
 
-        self.count+=1
         s = self.game.state_to_string(state)
         current_player = state[2]
         v = self.game.get_game_ended(state, current_player)
-        if self.count >= 20:
-            print(f"s={s}, v={v}, state={state}, current_player={current_player}, last_action={self.last_action}, last_player={self.last_player}")
-            raise RecursionError("something wrong here")
         
         if v != 0:
             # terminal node
@@ -393,8 +389,11 @@ class BlackJackMCTS(MCTS):
 
         a = best_act
         next_s = self.game.get_next_state(state, current_player, a)
+        next_player = next_s[2]
         v = self.search(next_s)
-            
+        if (current_player != next_player):
+            v = -v
+
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
             self.Nsa[(s, a)] += 1
@@ -460,7 +459,7 @@ class BlackJackAgent(Agent):
             r = state[3]
 
             if r != 0:
-                return [(x[0], x[2], r*x[1], x[1]) for x in trainExamples]
+                return [(x[0], x[2], x[1], x[1]) for x in trainExamples]
 
     def learn(self):
         """

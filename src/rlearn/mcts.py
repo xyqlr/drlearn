@@ -30,7 +30,6 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for i in range(self.args.numMCTSSims):
-            self.count = 0
             self.search(state)
 
         s = self.game.state_to_string(state)
