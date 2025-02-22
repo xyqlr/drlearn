@@ -32,9 +32,11 @@ jobs:
             python -m pip install --upgrade pip
             pip install -r requirements.txt
 
-      - name: Debug pytest installation
+      # Add src to PYTHONPATH
+      - name: Set PYTHONPATH
         run: |
-            pip show pytest
+          echo "PYTHONPATH=$PYTHONPATH:$GITHUB_WORKSPACE/src" >> $GITHUB_ENV
+
 
       - name: Run tests
         run: |
