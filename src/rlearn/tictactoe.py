@@ -10,6 +10,8 @@ import time
 from rlearn.game import Game
 from rlearn.nnet import NeuralNetModel
 from rlearn.args import args, nnargs, parse_args, main
+from rlearn.mcts import MCTS
+from rlearn.agent import Agent
 
 # Tic-Tac-Toe Environment
 class TicTacToe(Game):
@@ -249,5 +251,10 @@ if __name__ == "__main__":
     parse_args()
     game = TicTacToe()
     nnet = TicTacToeModel(game, nnargs)
+    mcts = MCTS(game, nnet, nnet, args)
     human_player = HumanTicTacToePlayer(game)
-    main(game, nnet, human_player)
+    agent = None
+    if not (args.eval or args.play or args.load_model):
+        agent = Agent(game, nnet, args, nnargs)
+
+    main(game, nnet, mcts, human_player, agent)

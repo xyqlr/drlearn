@@ -76,7 +76,7 @@ def parse_args():
     if inargs.channels:
         nnargs.num_channels = inargs.channels
 
-def main(game, nnet, human_player, agent=None):
+def main(game, nnet, mcts, human_player, agent=None):
     loglevels = dict(DEBUG=logging.DEBUG, 
                      INFO=logging.INFO,
                      WARNING=logging.WARNING,
@@ -88,7 +88,6 @@ def main(game, nnet, human_player, agent=None):
     if args.eval:
         logging.info('Playing against self')
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
-        mcts = MCTS(game, nnet, nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
         pwins, nwins, draws = arena.play_games(args.games_eval)
@@ -97,24 +96,23 @@ def main(game, nnet, human_player, agent=None):
     elif args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
-        mcts = MCTS(game, nnet, nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = human_player.play
-        arena = Arena(cp, hp, game, display=game.display)
+        arena = Arena(hp, cp, game, display=game.display)
         arena.play_games(args.games_play, verbose = True)
 
     else:
+        assert agent is not None
+        
         if args.load_model:
             logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.tar')
             nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
         else:
             logging.warning('Not loading a checkpoint!')
 
-        c = Agent(game, nnet, args, nnargs)
-
         if args.load_model:
             logging.info("Loading 'trainExamples' from file...")
-            c.load_train_examples(best=True)
+            agent.load_train_examples(best=True)
 
         logging.info('Starting the learning process 🎉')
-        c.learn()
+        agent.learn()

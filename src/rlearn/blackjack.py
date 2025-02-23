@@ -299,14 +299,14 @@ class BlackJackAgent(Agent):
     https://github.com/suragnair/alpha-zero-general
     """
 
-    def __init__(self, game, nnet, args, nnargs=None):
+    def __init__(self, game, nnet, dealnet_net, mcts, args, nnargs=None):
         self.game = game
         self.nnet = nnet
         self.pnet = self.nnet.__class__(self.game, nnargs)  # the competitor network
-        self.dealer_nnet = self.nnet.__class__(self.game, nnargs)  # the dealer network
+        self.dealer_nnet = dealer_nnet  # the dealer network
         self.dealer_pnet = self.nnet.__class__(self.game, nnargs)  # the previous dealer network
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet, self.dealer_nnet, self.args)
+        self.mcts = mcts
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in load_train_examples()
 
@@ -421,60 +421,19 @@ class BlackJackAgent(Agent):
                 self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.tar')
                 self.save_train_examples(i - 1, best=True)
 
-def main():
-    loglevels = dict(DEBUG=logging.DEBUG, 
-                     INFO=logging.INFO,
-                     WARNING=logging.WARNING,
-                     ERROR=logging.ERROR,
-                     CRITICAL=logging.CRITICAL 
-                     )
-    logging.basicConfig(level=loglevels[args.log_level])
-
-    game = BlackJack()
-
-    nnet = BlackJackModel(game, nnargs)
-
-    if args.eval:
-        logging.info('Playing against self')
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
-        dealer_nnet = BlackJackModel(game, nnargs)
-        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.tar')
-        mcts = MCTS(game, nnet, dealer_nnet, args)
-        arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
-                        lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
-        pwins, dwins, draws = arena.play_games(args.games_eval)
-
-        logging.info('PLAYER/DEALER WINS : %d / %d ; DRAWS : %d' % (pwins, dwins, draws))
-    elif args.play:
-        logging.info("Let's play!")
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
-        dealer_nnet = BlackJackModel(game, nnargs)
-        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.tar')
-        mcts = MCTS(game, nnet, dealer_nnet, args)
-        cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
-        hp = HumanBlackJackPlayer(game).play
-        arena = Arena(hp, cp, game, display=BlackJack.display)
-        arena.play_games(args.games_play, verbose = True)
-
-    else:
-        if args.load_model:
-            logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.tar')
-            nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
-        else:
-            logging.warning('Not loading a checkpoint!')
-
-        c = BlackJackAgent(game, nnet, args, nnargs)
-
-        if args.load_model:
-            logging.info("Loading 'trainExamples' from file...")
-            c.load_train_examples(best=True)
-
-        logging.info('Starting the learning process 🎉')
-        c.learn()
-
 if __name__ == "__main__":
     nnargs.channels = 512     #set the default
     args.numMCTSSims=50
     args.numEps=100
     parse_args()
-    main()
+    game = BlackJack()
+    nnet = BlackJackModel(game, nnargs)
+    dealer_nnet = BlackJackModel(game, nnargs)
+    mcts = MCTS(game, nnet, dealer_nnet, args)
+    agent = None
+    if args.eval or args.play or args.load_model:
+        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.tar')
+    else:
+        agent = BlackJackAgent(game, nnet, dealer_nnet, mcts, args, nnargs)
+    human_player = HumanBlackJackPlayer(game)
+    main(game, nnet, mcts, human_player, agent)
