@@ -11,10 +11,11 @@ from tqdm import tqdm
 from rlearn.utils import AverageMeter
 
 class NeuralNetModel(nn.Module):
-    def __init__(self, game, args):
+    def __init__(self, game, args, input_shape):
         # game params
         self.args = args
         self.game = game
+        self.input_shape = input_shape
         super().__init__()
         if args.cuda:
             super().cuda()
@@ -36,24 +37,24 @@ class NeuralNetModel(nn.Module):
             t = tqdm(range(batch_count), desc='Training Net')
             for _ in t:
                 sample_ids = np.random.randint(len(examples), size=self.args.batch_size)
-                boards, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                boards = torch.FloatTensor(np.array(boards).astype(np.float64))
+                states, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
+                states = torch.FloatTensor(np.array(states).astype(np.float64))
                 target_pis = torch.FloatTensor(np.array(pis))
                 target_vs = torch.FloatTensor(np.array(vs).astype(np.float64))
 
                 # predict
                 if self.args.cuda:
-                    boards, target_pis, target_vs = boards.contiguous().cuda(), target_pis.contiguous().cuda(), target_vs.contiguous().cuda()
+                    states, target_pis, target_vs = states.contiguous().cuda(), target_pis.contiguous().cuda(), target_vs.contiguous().cuda()
 
                 # compute output
-                out_pi, out_v = self(boards)
+                out_pi, out_v = self(states)
                 l_pi = self.loss_pi(target_pis, out_pi)
                 l_v = self.loss_v(target_vs, out_v)
                 total_loss = l_pi + l_v
 
                 # record loss
-                pi_losses.update(l_pi.item(), boards.size(0))
-                v_losses.update(l_v.item(), boards.size(0))
+                pi_losses.update(l_pi.item(), states.size(0))
+                v_losses.update(l_v.item(), states.size(0))
                 t.set_postfix(Loss_pi=pi_losses, Loss_v=v_losses)
 
                 # compute gradient and do SGD step
@@ -71,14 +72,15 @@ class NeuralNetModel(nn.Module):
         # preparing input
         state = torch.FloatTensor(state.astype(np.float64))
         if self.args.cuda: state = state.contiguous().cuda()
-        state = state.view(1, self.board_x, self.board_y)
+        input_shape = (1, *self.input_shape)
+        state = state.view(input_shape)
         super().eval()
         with torch.no_grad():
             pi, v = self(state)
 
         # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
         return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
-
+    
     def loss_pi(self, targets, outputs):
         return -torch.sum(targets * outputs) / targets.size()[0]
 

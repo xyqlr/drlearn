@@ -204,7 +204,7 @@ class TicTacToeModel(NeuralNetModel):
         # game params
         self.board_x, self.board_y = game.get_shape()
         self.action_size = game.get_action_size()
-        super().__init__(game, args)
+        super().__init__(game, args, game.get_shape())
 
         self.conv1 = nn.Conv2d(1, args.num_channels, 3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(args.num_channels, args.num_channels, 3, stride=1, padding=1)
@@ -242,24 +242,6 @@ class TicTacToeModel(NeuralNetModel):
         v = self.fc4(s)                                                                          # batch_size x 1
 
         return F.log_softmax(pi, dim=1), torch.tanh(v)
-
-    def predict(self, state):
-        """
-        state: np array with state
-        """
-        # timing
-        start = time.time()
-
-        # preparing input
-        state = torch.FloatTensor(state.astype(np.float64))
-        if self.args.cuda: state = state.contiguous().cuda()
-        state = state.view(1, self.board_x, self.board_y)
-        super().eval()
-        with torch.no_grad():
-            pi, v = self(state)
-
-        # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
-        return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
 
 if __name__ == "__main__":
     nnargs.channels = 64     #set the default

@@ -278,7 +278,7 @@ class BlackJackModel(NeuralNetModel):
         # game params
         self.state_size = game.get_shape()[0]+1
         self.action_size = game.get_action_size()
-        super().__init__(game, args)
+        super().__init__(game, args, (self.state_size, ))
         self.fc1 = nn.Linear(self.state_size, args.num_channels)
         self.fc2 = nn.Linear(args.num_channels, args.num_channels)
         self.fc3 = nn.Linear(args.num_channels, self.action_size)
@@ -291,25 +291,6 @@ class BlackJackModel(NeuralNetModel):
         v = self.fc4(x)  
 
         return F.log_softmax(pi, dim=1), torch.tanh(v)
-        return self.fc3(x)
-
-    def predict(self, state):
-        """
-        state: np array with state
-        """
-        # timing
-        start = time.time()
-
-        # preparing input
-        state = torch.FloatTensor(state.astype(np.float64))
-        if self.args.cuda: state = state.contiguous().cuda()
-        state = state.view(1, self.state_size)
-        super().eval()
-        with torch.no_grad():
-            pi, v = self(state)
-
-        # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
-        return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
 
 class BlackJackAgent(Agent):
     """
