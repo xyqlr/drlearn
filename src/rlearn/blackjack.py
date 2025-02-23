@@ -127,12 +127,13 @@ class BlackJack(Game):
             dealer_state, player_state, _, _ = self.to_neural_state(state)
             dealer_sum = max(self._get_value(dealer_state))
             player_sum = max(self._get_value(player_state))
+            #reward is from the current player's perspective
             if player_sum > dealer_sum:
-                return state0, state1, state[2], 1
+                return state0, state1, state[2], -1
             elif player_sum == dealer_sum:
                 return state0, state1, state[2], 1e-4 #small value for tie
             else:
-                return state0, state1, state[2], -1
+                return state0, state1, state[2], 1
 
     def get_valid_actions(self, state, player):
         '''
@@ -185,7 +186,7 @@ class BlackJack(Game):
 
     @staticmethod
     def display(state):
-        player_state, dealer_state, _, current_player = state
+        player_state, dealer_state, current_player, _ = state
         if current_player == -1:
             dealer_state, player_state, _, _ = state
             dealer_str = ','.join(x for x in dealer_state)

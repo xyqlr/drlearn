@@ -111,7 +111,8 @@ class Arena():
             else:
                 draws += 1
 
-        self.player1, self.player2 = self.player2, self.player1
+        if self.game.alternate_turn:
+            self.player1, self.player2 = self.player2, self.player1
 
         for _ in tqdm(range(num), desc="Arena.play_games (2)"):
             gameResult = self.play_game(verbose=verbose)
@@ -151,7 +152,7 @@ class Arena():
             current_player = state[2]
             ended = state[3]
 
-        return ended if current_player==1 else -ended
+        return ended*current_player
 
     def eval_games(self, num):
         """
