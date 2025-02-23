@@ -4,8 +4,9 @@ This class need be subclassed by the specific game.
 '''
 
 class Game:
-    def __init__(self, alternate_turn=True):
+    def __init__(self, alternate_turn=True, player_agnostic_state=True):
         self.alternate_turn = alternate_turn
+        self.player_agnostic_state = player_agnostic_state
         
     def get_init_state(self):
         '''

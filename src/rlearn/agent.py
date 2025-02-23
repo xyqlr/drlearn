@@ -82,7 +82,7 @@ class Agent():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for j in tqdm(range(self.args.numEps), desc="Self Play"):
-                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+                    self.mcts = MCTS(self.game, self.nnet, self.nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.execute_episode()
 
                 # save the iteration examples to the history 
@@ -105,10 +105,10 @@ class Agent():
             # training new network, keeping a copy of the old one
             self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
             self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.tar')
-            pmcts = MCTS(self.game, self.pnet, self.args)
+            pmcts = MCTS(self.game, self.pnet, self.pnet, self.args)
 
             self.nnet.fit(trainExamples)
-            nmcts = MCTS(self.game, self.nnet, self.args)
+            nmcts = MCTS(self.game, self.nnet, self.nnet, self.args)
 
             log.info('PLAYING AGAINST PREVIOUS VERSION')
             arena = Arena(lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)),

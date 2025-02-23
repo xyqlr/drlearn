@@ -88,7 +88,7 @@ def main(game, nnet, human_player, agent=None):
     if args.eval:
         logging.info('Playing against self')
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
-        mcts = MCTS(game, nnet, args)
+        mcts = MCTS(game, nnet, nnet, args)
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                         lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
         pwins, nwins, draws = arena.play_games(args.games_eval)
@@ -97,7 +97,7 @@ def main(game, nnet, human_player, agent=None):
     elif args.play:
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.tar')
-        mcts = MCTS(game, nnet, args)
+        mcts = MCTS(game, nnet, nnet, args)
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = human_player.play
         arena = Arena(cp, hp, game, display=game.display)

@@ -10,9 +10,10 @@ class MCTS():
     https://github.com/suragnair/alpha-zero-general
     """
 
-    def __init__(self, game, nnet, args):
+    def __init__(self, game, nnet, nnet_opponent, args):
         self.game = game
         self.nnet = nnet
+        self.nnet_opponent = nnet_opponent
         self.args = args
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
@@ -69,17 +70,22 @@ class MCTS():
 
         s = self.game.state_to_string(state)
         current_player = state[2]
-        v = self.game.get_game_ended(state, 1)  #player agonistic state
+        #1 for alternate turn
+        player = 1 if self.game.alternate_turn else current_player
+        v = self.game.get_game_ended(state, player)  
         if v != 0:
             # terminal node
-            return -v
+            return -v if self.game.alternate_turn else v
 
         if s not in self.Ps:
             # leaf node
             state_np = self.game.to_neural_state(state)
             state_in = state_np[0]
-            self.Ps[s], v = self.nnet.predict(state_in)
-            valids = self.game.get_valid_actions(state, 1)  #player agonistic state
+            if current_player == 1:
+                self.Ps[s], v = self.nnet.predict(state_in)
+            else:
+                self.Ps[s], v = self.nnet_opponent.predict(state_in)
+            valids = self.game.get_valid_actions(state, player)  # 1 for alternate turn
             self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
             sum_Ps_s = np.sum(self.Ps[s])
             if sum_Ps_s > 0:
@@ -93,11 +99,10 @@ class MCTS():
                 self.Ps[s] = self.Ps[s] + valids
                 self.Ps[s] /= np.sum(self.Ps[s])
 
-            self.Vs[s] = valids
             self.Ns[s] = 0
-            return -v
+            return -v if self.game.alternate_turn else v
 
-        valids = self.Vs[s]
+        valids = self.game.get_valid_actions(state, player)
         cur_best = -float('inf')
         best_act = -1
 
@@ -115,12 +120,15 @@ class MCTS():
                     best_act = a
 
         a = best_act
-        next_s = self.game.get_next_state(state, 1, a) #player agonistic state
+        next_s = self.game.get_next_state(state, player, a) #1 for alternate turn
         next_player = next_s[2]
-        next_s = self.game.get_player_agnostic_state(next_s, next_player)
+        if self.game.player_agnostic_state:
+            next_s = self.game.get_player_agnostic_state(next_s, next_player)
 
         v = self.search(next_s)
-            
+        if not self.game.alternate_turn and current_player != next_player:
+            v = -v
+
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
             self.Nsa[(s, a)] += 1
@@ -130,5 +138,5 @@ class MCTS():
             self.Nsa[(s, a)] = 1
 
         self.Ns[s] += 1
-        return -v
+        return -v if self.game.alternate_turn else v
 
