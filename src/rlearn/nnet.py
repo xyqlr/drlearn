@@ -12,7 +12,6 @@ from rlearn.utils import AverageMeter
 
 class NeuralNetModel(nn.Module):
     def __init__(self, game, args, input_shape):
-        # game params
         self.args = args
         self.game = game
         self.input_shape = input_shape
@@ -78,7 +77,6 @@ class NeuralNetModel(nn.Module):
         with torch.no_grad():
             pi, v = self(state)
 
-        # print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
         return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
     
     def loss_pi(self, targets, outputs):
@@ -87,7 +85,7 @@ class NeuralNetModel(nn.Module):
     def loss_v(self, targets, outputs):
         return torch.sum((targets - outputs.view(-1)) ** 2) / targets.size()[0]
 
-    def save_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
+    def save_checkpoint(self, folder='checkpoint', filename='checkpoint.pth'):
         filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
         if not os.path.exists(folder):
             logging.debug("Checkpoint Directory does not exist! Making directory {}".format(folder))
@@ -98,12 +96,10 @@ class NeuralNetModel(nn.Module):
             'state_dict': self.state_dict(),
         }, filepath)
 
-    def load_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
-        # https://github.com/pytorch/examples/blob/master/imagenet/main.py#L98
+    def load_checkpoint(self, folder='checkpoint', filename='checkpoint.pth'):
         filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
         if not os.path.exists(filepath):
             raise ("No model in path {}".format(filepath))
         map_location = None if self.args.cuda else 'cpu'
         checkpoint = torch.load(filepath, map_location=map_location)
         self.load_state_dict(checkpoint['state_dict'])
-

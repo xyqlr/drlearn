@@ -6,5 +6,10 @@ from .nnet import NeuralNetModel
 from .arena import Arena
 from .mcts import MCTS
 from .args import args, nnargs
-from .tictactoe import TicTacToe, TicTacToeModel, HumanTicTacToePlayer
-from .blackjack import BlackJack, BlackJackModel, HumanBlackJackPlayer, BlackJackAgent, ACTION_HIT, ACTION_STAND, PLAYER, DEALER
+from .tictactoe_model import TicTacToeModel
+from .tictactoe_game import TicTacToe
+from .tictactoe_player import HumanTicTacToePlayer
+from .blackjack_game import BlackJack, ACTION_HIT, ACTION_STAND, PLAYER, DEALER
+from .blackjack_model import BlackJackModel
+from .blackjack_player import HumanBlackJackPlayer
+from .blackjack_agent import BlackJackAgent

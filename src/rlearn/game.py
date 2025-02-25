@@ -1,6 +1,6 @@
 '''
-The Game class represents the game logic, more importantly the state, the actions, and the state transiton.
-This class need be subclassed by the specific game.
+The Game class represents the game logic, more importantly the state, the actions, and the state transition.
+This class needs to be subclassed by the specific game.
 '''
 
 class Game:
@@ -10,16 +10,16 @@ class Game:
         
     def get_init_state(self):
         '''
-        state:  (player_state, opppnent_state, current_player, reward)
+        state:  (player_state, opponent_state, current_player, reward)
             player_state: a list containing the cards of the player
-            opppnent_state: a list containing the cards of the dealer
+            opponent_state: a list containing the cards of the dealer
                 only the first card of the dealer is displayed when playing against human 
             reward:  1    :  if current_player wins
                     -1    :  if the other player wins
                     0     :  game not finished
                     1e-4  :  game is tied
-        when the player stands, it switches to the dealer. for convenicne, the state becomes
-                (opppnent_state, player_state, current_player, reward)
+        when the player stands, it switches to the dealer. for convenience, the state becomes
+                (opponent_state, player_state, current_player, reward)
         if the game has player agnostic state, the opponent_state is the same as the player state
         '''
         pass
@@ -39,7 +39,7 @@ class Game:
     def get_action_size(self):
         '''
         the number of actions.
-        each acction is denoted as 0 to N-1, where N is the number of actions 
+        each action is denoted as 0 to N-1, where N is the number of actions 
         '''
         pass
 
@@ -59,7 +59,7 @@ class Game:
 
     def get_player_agnostic_state(self, state, player):
         '''
-        if the game does not have player agnositic state, just return the state back
+        if the game does not have player agnostic state, just return the state back
         '''
         pass
 
@@ -81,7 +81,7 @@ class Game:
 
     def state_to_string(self, state):
         '''
-        this return a string representation of the state, which needs be unique, as it is used as the key to the dictionaries in MCTS
+        this returns a string representation of the state, which needs to be unique, as it is used as the key to the dictionaries in MCTS
         '''
         pass
 
@@ -91,4 +91,3 @@ class Game:
         this shows the state for playing the game against a human player
         '''
         pass
-

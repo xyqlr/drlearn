@@ -1,7 +1,7 @@
 import logging
 from tqdm import tqdm
 
-class Arena():
+class Arena:
     """
     An Arena class where any 2 agents can be pit against each other.
     https://github.com/suragnair/alpha-zero-general
@@ -10,9 +10,9 @@ class Arena():
     def __init__(self, player1, player2, game, display=None):
         """
         Input:
-            player 1,2: two functions that takes board as input, return action
+            player 1,2: two functions that take the board as input, return action
             game: Game object
-            display: a function that takes board as input and prints it (e.g.
+            display: a function that takes the board as input and prints it (e.g.
                      display in othello/OthelloGame). Is necessary for verbose
                      mode.
 
@@ -40,11 +40,11 @@ class Arena():
         it = 0
 
         for player in players[0], players[2]:
-            if hasattr(player, "startGame"):
-                player.startGame()
+            if hasattr(player, "start_game"):
+                player.start_game()
 
         ended = False
-        while ended==0:
+        while ended == 0:
             it += 1
             if verbose:
                 assert self.display
@@ -60,7 +60,7 @@ class Arena():
                 logging.debug(f'valids = {valids}')
                 assert valids[action] > 0
 
-            # Notifying the opponent for the move
+            # Notifying the opponent of the move
             opponent = players[-current_player + 1]
             if hasattr(opponent, "notify"):
                 opponent.notify(state, action)
@@ -70,22 +70,22 @@ class Arena():
             ended = self.game.get_game_ended(state, current_player)
 
         for player in players[0], players[2]:
-            if hasattr(player, "endGame"):
-                player.endGame()
+            if hasattr(player, "end_game"):
+                player.end_game()
 
-        reward = ended*current_player
+        reward = ended * current_player
 
         if verbose:
             assert self.display
             logging.debug("Game over: Turn ", str(it), "Result ", str(reward))
             self.display(state)
-            if reward==1:
-                print("Player won!")
-            elif reward==-1:
-                print("The other won!")
+            if reward == 1:
+                print("The first player won!")
+            elif reward == -1:
+                print("The second player won!")
             else:
                 print("It is a tie")
-        return reward 
+        return reward
 
     def play_games(self, num, verbose=False):
         """
@@ -93,21 +93,21 @@ class Arena():
         num/2 games.
 
         Returns:
-            oneWon: games won by player1
-            twoWon: games won by player2
-            draws:  games won by nobody
+            one_won: games won by player1
+            two_won: games won by player2
+            draws: games won by nobody
         """
 
         num = int(num / 2)
-        oneWon = 0
-        twoWon = 0
+        one_won = 0
+        two_won = 0
         draws = 0
         for _ in tqdm(range(num), desc="Arena.play_games (1)"):
-            gameResult = self.play_game(verbose=verbose)
-            if gameResult == 1:
-                oneWon += 1
-            elif gameResult == -1:
-                twoWon += 1
+            game_result = self.play_game(verbose=verbose)
+            if game_result == 1:
+                one_won += 1
+            elif game_result == -1:
+                two_won += 1
             else:
                 draws += 1
 
@@ -115,15 +115,15 @@ class Arena():
             self.player1, self.player2 = self.player2, self.player1
 
         for _ in tqdm(range(num), desc="Arena.play_games (2)"):
-            gameResult = self.play_game(verbose=verbose)
-            if gameResult == -1:
-                oneWon += 1
-            elif gameResult == 1:
-                twoWon += 1
+            game_result = self.play_game(verbose=verbose)
+            if game_result == -1:
+                one_won += 1
+            elif game_result == 1:
+                two_won += 1
             else:
                 draws += 1
 
-        return oneWon, twoWon, draws
+        return one_won, two_won, draws
 
     def eval_game(self, start_state, player_func):
         """
@@ -138,7 +138,7 @@ class Arena():
         current_player = 1
         state = start_state
         ended = False
-        while ended==0:
+        while ended == 0:
             action = player_func(state)
 
             valids = self.game.get_valid_actions(state, current_player)
@@ -152,7 +152,7 @@ class Arena():
             current_player = state[2]
             ended = state[3]
 
-        return ended*current_player
+        return ended * current_player
 
     def eval_games(self, num):
         """
@@ -160,23 +160,23 @@ class Arena():
         num/2 games.
 
         Returns:
-            oneWon: games won by player1
-            twoWon: games won by player2
-            draws:  games won by nobody
+            one_won: games won by player1
+            two_won: games won by player2
+            draws: games won by nobody
         """
 
-        oneWon = 0
-        twoWon = 0
+        one_won = 0
+        two_won = 0
         draws = 0
         for _ in tqdm(range(num), desc="Arena.eval_games"):
             start_state = self.game.get_init_state()
             result1 = self.eval_game(start_state, self.player1)
             result2 = self.eval_game(start_state, self.player2)
             if result1 > result2:
-                oneWon += 1
+                one_won += 1
             elif result1 < result2:
-                twoWon += 1
+                two_won += 1
             else:
                 draws += 1
 
-        return oneWon, twoWon, draws
+        return one_won, two_won, draws
