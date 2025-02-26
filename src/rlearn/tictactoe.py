@@ -7,7 +7,7 @@ from rlearn.agent import Agent
 
 if __name__ == "__main__":
     nnargs.num_channels = 64     #set the default
-    args.games_sim=10
+    args.games_sim=1
     parse_args()
     game = TicTacToe()
     nnet = TicTacToeModel(game, nnargs)

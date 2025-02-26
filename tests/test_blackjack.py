@@ -32,23 +32,48 @@ def test_blackjack_get_action_prob(setup_blackjack_game):
     dealer_nnet = BlackJackModel(game, nnargs)
     dealer_nnet.load_checkpoint(folder=best_model_path, filename='bestd.pth')
     nnet.load_checkpoint(folder=best_model_path, filename='best.pth')
+    mcts = MCTS(game, nnet, dealer_nnet, args)
 
     state = (['10', '7'], ['9', 'A'], DEALER, 0)
-    mcts = MCTS(game, nnet, dealer_nnet, args)
+    state_n = game.to_neural_state(state)
+    pi, v = dealer_nnet.predict(state_n[0])
+    # Format each element of the arrays
+    pi_formatted = ", ".join(f"{x:.3f}" for x in pi)
+    v_formatted = ", ".join(f"{x:.3f}" for x in v)
+    # Log with formatting
+    logging.debug(f"pi: [{pi_formatted}], v: [{v_formatted}]")
     pi = mcts.get_action_prob(state, temp=0)
     logging.debug(f"pi: {pi}")
 
     state = (['10', '7'], ['9', '9'], DEALER, 0)
-    mcts = MCTS(game, nnet, dealer_nnet, args)
+    state_n = game.to_neural_state(state)
+    pi, v = dealer_nnet.predict(state_n[0])
+    # Format each element of the arrays
+    pi_formatted = ", ".join(f"{x:.3f}" for x in pi)
+    v_formatted = ", ".join(f"{x:.3f}" for x in v)
+    # Log with formatting
+    logging.debug(f"pi: [{pi_formatted}], v: [{v_formatted}]")
     pi = mcts.get_action_prob(state, temp=0)
     logging.debug(f"pi: {pi}")
 
     state = (['10', '7'], ['9', '8'], DEALER, 0)
-    mcts = MCTS(game, nnet, dealer_nnet, args)
+    state_n = game.to_neural_state(state)
+    pi, v = dealer_nnet.predict(state_n[0])
+    # Format each element of the arrays
+    pi_formatted = ", ".join(f"{x:.3f}" for x in pi)
+    v_formatted = ", ".join(f"{x:.3f}" for x in v)
+    # Log with formatting
+    logging.debug(f"pi: [{pi_formatted}], v: [{v_formatted}]")
     pi = mcts.get_action_prob(state, temp=0)
     logging.debug(f"pi: {pi}")
 
     state = (['10', '7'], ['9', '6'], DEALER, 0)
-    mcts = MCTS(game, nnet, dealer_nnet, args)
+    state_n = game.to_neural_state(state)
+    pi, v = dealer_nnet.predict(state_n[0])
+    # Format each element of the arrays
+    pi_formatted = ", ".join(f"{x:.3f}" for x in pi)
+    v_formatted = ", ".join(f"{x:.3f}" for x in v)
+    # Log with formatting
+    logging.debug(f"pi: [{pi_formatted}], v: [{v_formatted}]")
     pi = mcts.get_action_prob(state, temp=0)
     logging.debug(f"pi: {pi}")

@@ -1,5 +1,9 @@
 import pytest
+import numpy as np
+import logging
+import os
 from rlearn import TicTacToe, HumanTicTacToePlayer, TicTacToeModel, nnargs
+from rlearn import MCTS, args
 
 def test_initial_state(setup_tictactoe_game):
     game, _, _ = setup_tictactoe_game
@@ -26,3 +30,25 @@ def test_game_ended(setup_tictactoe_game):
     state[0][1] = 1
     state[0][2] = 1
     assert game.get_game_ended(state, 1) == 1  # player 1 should win
+
+def test_tictactoe_get_action_prob(setup_tictactoe_game):
+    game, model, human_player = setup_tictactoe_game
+    best_model_path = os.path.join(os.path.dirname(__file__), "../best_models")
+    nnargs.num_channels = 64
+    nnet = TicTacToeModel(game, nnargs)
+    nnet.load_checkpoint(folder=best_model_path, filename='best.pth')
+    mcts = MCTS(game, nnet, nnet, args)
+
+    state = (np.array([1,0,0,0,0,0,0,0,0]), np.array([1,0,0,0,0,0,0,0,0]), -1, 0)
+    state = game.get_player_agnostic_state(state, -1)
+    pi, v = nnet.predict(state[0])
+    # Format each element of the arrays
+    pi_formatted = ", ".join(f"{x:.3f}" for x in pi)
+    v_formatted = ", ".join(f"{x:.3f}" for x in v)
+
+    # Log with formatting
+    logging.debug(f"pi: [{pi_formatted}], v: [{v_formatted}]")
+    pi = mcts.get_action_prob(state, temp=0)
+    pi_formatted = ", ".join(f"{x:.3f}" for x in pi)
+    logging.debug(f"pi: [{pi_formatted}]")
+
