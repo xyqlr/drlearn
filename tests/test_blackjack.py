@@ -1,9 +1,9 @@
 import pytest
 import logging
 import os
-from rlearn.blackjack import BlackJack, BlackJackModel
-from rlearn import args, nnargs, MCTS
-from rlearn.blackjack import ACTION_HIT, ACTION_STAND, PLAYER, DEALER
+from drlearn.blackjack import BlackJack, BlackJackModel
+from drlearn import args, nnargs, MCTS
+from drlearn.blackjack import ACTION_HIT, ACTION_STAND, PLAYER, DEALER
 
 def test_blackjack_initial_state(setup_blackjack_game):
     game, model = setup_blackjack_game

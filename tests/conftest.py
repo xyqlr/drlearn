@@ -1,8 +1,8 @@
 import logging
 import pytest
-from rlearn import nnargs
-from rlearn.tictactoe import TicTacToe, TicTacToeModel
-from rlearn.blackjack import BlackJack, BlackJackModel
+from drlearn import nnargs
+from drlearn.tictactoe import TicTacToe, TicTacToeModel
+from drlearn.blackjack import BlackJack, BlackJackModel
 
 logging.basicConfig(level=logging.INFO)
 

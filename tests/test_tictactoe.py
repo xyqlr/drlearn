@@ -2,8 +2,8 @@ import pytest
 import numpy as np
 import logging
 import os
-from rlearn.tictactoe import TicTacToe, TicTacToeModel
-from rlearn import MCTS, args, nnargs
+from drlearn.tictactoe import TicTacToe, TicTacToeModel
+from drlearn import MCTS, args, nnargs
 
 def test_initial_state(setup_tictactoe_game):
     game, _ = setup_tictactoe_game
