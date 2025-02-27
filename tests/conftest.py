@@ -1,6 +1,8 @@
 import logging
 import pytest
-from rlearn import TicTacToe, HumanTicTacToePlayer, TicTacToeModel, nnargs, BlackJack, BlackJackModel, HumanBlackJackPlayer
+from rlearn import nnargs
+from rlearn.tictactoe import TicTacToe, TicTacToeModel
+from rlearn.blackjack import BlackJack, BlackJackModel
 
 logging.basicConfig(level=logging.INFO)
 
@@ -8,13 +10,11 @@ logging.basicConfig(level=logging.INFO)
 def setup_tictactoe_game():
     game = TicTacToe()
     model = TicTacToeModel(game, nnargs)
-    human_player = HumanTicTacToePlayer(game)
-    return game, model, human_player
+    return game, model
 
 @pytest.fixture
 def setup_blackjack_game():
     game = BlackJack()
     model = BlackJackModel(game, nnargs)
-    human_player = HumanBlackJackPlayer(game)
-    return game, model, human_player
+    return game, model
 

@@ -114,6 +114,20 @@ class BlackJack(Game):
             dealer_value = max(self._get_value(dealer_state))
             return ''.join([str(v) for k, v in enumerate(player_state[:-1])]) + ":" + str(dealer_value) + ":" + str(current_player)
 
+    def play(self, state):
+        valid = self.get_valid_actions(state, 1)
+        str = f"Enter 0 for hit\n" if valid[0] else f""
+        str += f"Enter 1 for stand" if valid[1] else f""
+        print(str)
+        while True:
+            a = input()
+            a = int(a)
+            if valid[a]:
+                break
+            else:
+                print('Invalid')
+        return a
+    
     @staticmethod
     def display(state):
         player_state, dealer_state, current_player, _ = state

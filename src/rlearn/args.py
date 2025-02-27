@@ -70,7 +70,7 @@ def parse_args():
         nnargs.num_channels = inargs.channels
 
 
-def main(game, nnet, mcts, human_player, agent=None):
+def main(game, nnet, mcts, agent=None):
     loglevels = dict(DEBUG=logging.DEBUG,
                      INFO=logging.INFO,
                      WARNING=logging.WARNING,
@@ -90,7 +90,7 @@ def main(game, nnet, mcts, human_player, agent=None):
         logging.info("Let's play!")
         nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth')
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
-        hp = human_player.play
+        hp = game.play
         arena = Arena(hp, cp, game, display=game.display)
         arena.play_games(args.games_play, verbose=True)
     else:

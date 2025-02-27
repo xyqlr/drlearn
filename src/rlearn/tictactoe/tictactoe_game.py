@@ -126,6 +126,23 @@ class TicTacToe(Game):
         s = state[0]
         return ','.join([str(s[x*self.n+y]) for x in range(self.n) for y in range(self.n)])
 
+    def play(self, state):
+        valid = self.get_valid_actions(state, 1)
+        for i in range(len(valid)):
+            if valid[i]:
+                print(int(i/self.n), int(i%self.n))
+        while True: 
+            a = input()
+
+            x,y = [int(x) for x in a.split(' ')]
+            a = self.n * x + y if x!= -1 else self.n ** 2
+            if valid[a]:
+                break
+            else:
+                print('Invalid')
+
+        return a
+
     @staticmethod
     def display(state):
         n = 3

@@ -1,6 +1,7 @@
 import pytest
 
-from rlearn import BlackJack, ACTION_HIT, ACTION_STAND, PLAYER, DEALER, TicTacToe
+from rlearn.blackjack import BlackJack, ACTION_HIT, ACTION_STAND, PLAYER, DEALER
+from rlearn.tictactoe import TicTacToe
 
 def test_blackjack_game():
     game = BlackJack()

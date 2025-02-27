@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from rlearn.nnet import NeuralNetModel
+from rlearn.model import NeuralNetModel
 
 class TicTacToeModel(NeuralNetModel):
     def __init__(self, game, args):

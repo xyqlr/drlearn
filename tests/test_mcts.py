@@ -1,7 +1,7 @@
 import pytest
 
-from rlearn import BlackJack, BlackJackModel, MCTS
-from rlearn import args, nnargs
+from rlearn.blackjack import BlackJack, BlackJackModel
+from rlearn import args, nnargs, MCTS
 
 def test_mcts():
     game = BlackJack()
