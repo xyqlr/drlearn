@@ -23,12 +23,10 @@ This repository starts with refactoring the Tic-Tac-Toe game along with the fram
 
 ## Tic-Tac-Toe
 
-- The code is under subpackage drkearn.tictactoe.
-- The game specific stuff is in tictactoe_game.py.
-- The neural network model is in tictactoe_model.py.
-- Usage: python src/drlearn/tictactoe/tictactoe.py --help
-
-### Usage Example
+To see the usage:
+```bash
+python src/drlearn/tictactoe/tictactoe.py --help
+```
 
 To train the Tic-Tac-Toe model from scratch:
 ```bash
@@ -45,11 +43,22 @@ To evaluate the saved model against itself:
 python src/drlearn/tictactoe/tictactoe.py --eval
 ```
 
-To play against the trained model as a human player:
+To play against the trained model:
 ```bash
 python src/drlearn/tictactoe/tictactoe.py --play
 ```
 
 ## Blackjack
 
-TODO
+### Rules
+
+Blackjack is a card game where players try to get a hand value as close to 21 as possible without exceeding it. The game is played with one or more decks of 52 cards. Each card has a value: numbered cards are worth their face value, face cards (Jack, Queen, King) are worth 10, and Aces can be worth 1 or 11.
+
+- Each player is dealt two cards, and the dealer is dealt two cards (one face up, one face down).
+- Players can choose to "hit" (take another card) or "stand" (keep their current hand).
+- If a player's hand exceeds 21, they "bust" and lose the game.
+- After all players have finished their turns, the dealer reveals their face-down card and must hit until their hand is 17 or higher.
+- The player with a hand value closest to 21 without exceeding it wins. If the dealer busts, any remaining players win.
+
+What's shown here is one player playing against the dealer with one deck of cards.
+
