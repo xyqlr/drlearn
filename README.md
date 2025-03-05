@@ -64,5 +64,16 @@ What's shown here is one player playing against the dealer with one deck of card
 
 There is a Blackjack environment in [stable-baselines3](https://stable-baselines3.readthedocs.io/en/master/guide/examples.html#blackjack). The environment simulates the Blackjack game and can be used to train reinforcement learning agents. Why do we still develope the Blackjack game here?
 
+The main reason is that we want to extend the general framework to card games, and Blackjack is simple enough to start with. Another reason is that there is no model for the dealer in [stable-baselines3](https://stable-baselines3.readthedocs.io/en/master/guide/examples.html#blackjack), which could be problematic when there are mutiple players. Even with one player, it seems to assume some probablity distributions of the cards in the dealer's default decision. Will the dealer always stand after reaching 17 or higher and having equal value to the player? 
+
+We argue that the dealer can still make a choice between hit or stand even in this situation. The decision may turn out to be trivial, but we'd like the model to learn it. Therefore, we train a separate model for the dealer, which does not have the player agnostic state, and needs different training data.
+
+### Observation State vs Neural State
+
+### MCTS for the player and the dealer
+
+### Evaluation Against The Previous Model
+
+### Experimental Results
 
 
