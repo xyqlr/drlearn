@@ -79,7 +79,7 @@ We argue that the state has encoded some non-trivial human knowledge: the hand v
 
 The observation state for the player consists of the cards in the player's hand plus the dealer's visible card. The observation state for the dealer consists of the cards in the dealer's hand plus the player's cards.
 
-The observation states cannot be fed to the neural network models, because they are characters of different lengths. They are converted to the neural states, which are vectors of the same length. For the player, the neural state consists of the frequency of each card (ignoring the suits) in the player's hand plus the dealer's visible card index (with value 1 to 13). For the dealer, the neural state consists of the frequency of each card in the dealer's hand plus the player's maximal value (with Ace having value 11).
+The observation states cannot be fed to the neural network models, because they are characters of different lengths. They are converted to the neural states, which are vectors of the same length. For the player, the neural state consists of the frequency of each card (ignoring the suits) in the player's hand plus the dealer's visible card index (with value 1 to 13). For the dealer, the neural state consists of the frequency of each card in the dealer's hand plus the player's value, given that the player's value does not exceed 21.
 
 ### MCTS for the Player and the Dealer
 
