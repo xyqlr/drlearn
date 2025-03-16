@@ -23,7 +23,7 @@ class Agent:
         self.pnet = self.nnet.__class__(self.game, nnargs)  # the competitor network
         self.args = args
         self.train_examples_history = []  # history of examples from args.num_iters_for_train_examples_history latest iterations
-        self.skip_first_self_play = False  # can be overridden in load_train_examples()
+        self.skip_first_self_play = False  # can be overridden in load_train_data()
 
     def simulate_game(self):
         """
@@ -92,7 +92,7 @@ class Agent:
                 self.train_examples_history.pop(0)
             # backup history to a file
             # NB! the examples were collected using the model from the previous iteration, so (i-1)
-            # self.save_train_examples(i - 1)
+            # self.save_train_data(i - 1)
 
             # shuffle examples before training
             train_examples = []
@@ -101,8 +101,8 @@ class Agent:
             shuffle(train_examples)
 
             # training new network, keeping a copy of the old one
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth')
-            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth')
+            self.nnet.save_model()
+            self.pnet.load_model()
             pmcts = MCTS(self.game, self.pnet, self.pnet, self.args)
 
             self.nnet.fit(train_examples)
@@ -114,50 +114,41 @@ class Agent:
             pwins, nwins, draws = arena.play_games(self.args.games_eval)
 
             if i == 1:
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth')
-                self.save_train_examples(i - 1, best=True)
+                self.nnet.save_model()
+                self.save_train_data()
 
             log.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.update_threshold:
                 log.info('REJECTING NEW MODEL')
-                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth')
+                self.nnet.load_model()
             else:
                 log.info('ACCEPTING NEW MODEL')
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth')
-                self.save_train_examples(i - 1, best=True)
+                self.nnet.save_model()
+                self.save_train_data()
 
     def get_checkpoint_file(self, iteration):
         return 'checkpoint_' + str(iteration) + '.pth'
 
-    def save_train_examples(self, iteration, best=False):
-        folder = self.args.checkpoint
+    def save_train_data(self, filename='cur.data'):
+        folder = os.path.join(os.path.dirname(__file__), "../../saved_models")        
         if not os.path.exists(folder):
             os.makedirs(folder)
-        if best:
-            filename = os.path.join(folder, self.game.__class__.__name__ + ".best.pth.examples")
-        else:
-            filename = os.path.join(folder, self.get_checkpoint_file(iteration) + ".examples")
-        with open(filename, "wb+") as f:
+        filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
+        with open(filepath, "wb+") as f:
             Pickler(f).dump(self.train_examples_history)
         f.closed
 
-    def load_train_examples(self, best=False):
-        if best:
-            folder = self.args.checkpoint
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-            model_file = os.path.join(folder, self.game.__class__.__name__ + ".best.pth")
-        else:
-            model_file = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
-        examples_file = model_file + ".examples"
-        if not os.path.isfile(examples_file):
-            log.warning(f'File "{examples_file}" with train_examples not found!')
+    def load_train_data(self, filename='cur.data'):
+        folder = os.path.join(os.path.dirname(__file__), "../../saved_models")        
+        filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
+        if not os.path.isfile(filepath):
+            log.warning(f'File "{filepath}" with train_examples not found!')
             r = input("Continue? [y|n]")
             if r != "y":
                 sys.exit()
         else:
             log.info("File with train_examples found. Loading it...")
-            with open(examples_file, "rb") as f:
+            with open(filepath, "rb") as f:
                 self.train_examples_history = Unpickler(f).load()
             log.info('Loading done!')
 

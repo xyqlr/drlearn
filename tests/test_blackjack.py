@@ -32,12 +32,12 @@ def test_blackjack_next_state(setup_blackjack_game):
 ])
 def test_blackjack_get_action_prob(setup_blackjack_game, state):
     game, model = setup_blackjack_game
-    best_model_path = os.path.join(os.path.dirname(__file__), "../best_models")
+    best_model_path = os.path.join(os.path.dirname(__file__), "../saved_models")
     nnargs.num_channels = 512
     nnet = BlackJackModel(game, nnargs)
     dealer_nnet = BlackJackModel(game, nnargs)
-    dealer_nnet.load_checkpoint(folder=best_model_path, filename='bestd.pth')
-    nnet.load_checkpoint(folder=best_model_path, filename='best.pth')
+    dealer_nnet.load_model(filename='dealer.1.model')
+    nnet.load_model(filename='1.model')
     mcts = MCTS(game, nnet, dealer_nnet, args)
 
     state_n = game.to_neural_state(state)

@@ -80,7 +80,7 @@ def main(game, nnet, mcts, agent=None):
 
     if args.eval:
         logging.info('Playing against self')
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth')
+        nnet.load_model()
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                       lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
         pwins, nwins, draws = arena.play_games(args.games_eval)
@@ -88,7 +88,7 @@ def main(game, nnet, mcts, agent=None):
         logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
     elif args.play:
         logging.info("Let's play!")
-        nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth')
+        nnet.load_model()
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = game.play
         arena = Arena(hp, cp, game, display=game.display)
@@ -97,14 +97,14 @@ def main(game, nnet, mcts, agent=None):
         assert agent is not None
 
         if args.load_model:
-            logging.info('Loading checkpoint "%s/%s"...', args.checkpoint, 'best.pth')
-            nnet.load_checkpoint(folder=args.checkpoint, filename='best.pth')
+            logging.info('Loading model')
+            nnet.load_model()
         else:
-            logging.warning('Not loading a checkpoint!')
+            logging.warning('Not loading a model!')
 
         if args.load_model:
             logging.info("Loading 'trainExamples' from file...")
-            agent.load_train_examples(best=True)
+            agent.load_train_data()
 
         logging.info('Starting the learning process 🎉')
         agent.learn()

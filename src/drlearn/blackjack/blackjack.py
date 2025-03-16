@@ -4,7 +4,7 @@ from drlearn.blackjack import BlackJack
 from drlearn.blackjack import BlackJackModel
 from drlearn.blackjack import BlackJackAgent
 
-if __name__ == "__main__":
+def run():
     nnargs.num_channels = 512
     args.num_mcts_sims = 50
     args.games_sim = 100
@@ -15,7 +15,10 @@ if __name__ == "__main__":
     mcts = MCTS(game, nnet, dealer_nnet, args)
     agent = None
     if args.eval or args.play:
-        dealer_nnet.load_checkpoint(folder=args.checkpoint, filename='bestd.pth')
+        dealer_nnet.load_model()
     else:
         agent = BlackJackAgent(game, nnet, dealer_nnet, mcts, args, nnargs)
     main(game, nnet, mcts, agent)
+
+if __name__ == "__main__":
+    run()

@@ -37,10 +37,10 @@ def test_game_ended(setup_tictactoe_game):
 ])
 def test_tictactoe_get_action_prob(setup_tictactoe_game, state):
     game, model = setup_tictactoe_game
-    best_model_path = os.path.join(os.path.dirname(__file__), "../best_models")
+    best_model_path = os.path.join(os.path.dirname(__file__), "../saved_models")
     nnargs.num_channels = 64
     nnet = TicTacToeModel(game, nnargs)
-    nnet.load_checkpoint(folder=best_model_path, filename='best.pth')
+    nnet.load_model(filename='1.model')
     mcts = MCTS(game, nnet, nnet, args)
 
     state = game.get_player_agnostic_state(state, -1)

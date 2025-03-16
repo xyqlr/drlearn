@@ -85,18 +85,20 @@ class NeuralNetModel(nn.Module):
     def loss_v(self, targets, outputs):
         return torch.sum((targets - outputs.view(-1)) ** 2) / targets.size()[0]
 
-    def save_checkpoint(self, folder='checkpoint', filename='checkpoint.pth'):
+    def save_model(self, filename='cur.model'):
+        folder = os.path.join(os.path.dirname(__file__), "../../saved_models")        
         filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
         if not os.path.exists(folder):
-            logging.debug("Checkpoint Directory does not exist! Making directory {}".format(folder))
+            logging.debug("saved_models directory does not exist! Making directory {}".format(folder))
             os.mkdir(folder)
         else:
-            logging.debug("Checkpoint Directory exists! ")
+            logging.debug("saved_models directory exists! ")
         torch.save({
             'state_dict': self.state_dict(),
         }, filepath)
 
-    def load_checkpoint(self, folder='checkpoint', filename='checkpoint.pth'):
+    def load_model(self, filename='cur.model'):
+        folder = os.path.join(os.path.dirname(__file__), "../../saved_models")        
         filepath = os.path.join(folder, self.game.__class__.__name__+'.'+filename)
         if not os.path.exists(filepath):
             raise ("No model in path {}".format(filepath))

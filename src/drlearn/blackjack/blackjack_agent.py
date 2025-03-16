@@ -54,10 +54,10 @@ class BlackJackAgent(Agent):
             for e in self.train_examples_history:
                 train_examples.extend(e)
             shuffle(train_examples)
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth')
-            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth')
-            self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='tempd.pth')
-            self.dealer_pnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.pth')
+            self.nnet.save_model()
+            self.pnet.load_model()
+            self.dealer_nnet.save_model(filename='dealer.cur.model')
+            self.dealer_pnet.load_model(filename='dealer.cur.model')
             pmcts = MCTS(self.game, self.pnet, self.dealer_pnet, self.args)
             player_examples = [(x[0], x[1], x[2]) for x in train_examples if x[3] == 1]
             dealer_examples = [(x[0], x[1], x[2]) for x in train_examples if x[3] == -1]
@@ -68,16 +68,16 @@ class BlackJackAgent(Agent):
             arena = Arena(lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)), lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)), self.game)
             nwins, pwins, draws = arena.eval_games(self.args.games_eval)
             if i == 1:
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth')
-                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.pth')
-                self.save_train_examples(i - 1, best=True)
+                self.nnet.save_model()
+                self.dealer_nnet.save_model(filename='dealer.cur.model')
+                self.save_train_data()
             logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.update_threshold:
                 logging.info('REJECTING NEW MODEL')
-                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth')
-                self.dealer_nnet.load_checkpoint(folder=self.args.checkpoint, filename='tempd.pth')
+                self.nnet.load_model()
+                self.dealer_nnet.load_model(filename='dealer.cur.model')
             else:
                 logging.info('ACCEPTING NEW MODEL')
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth')
-                self.dealer_nnet.save_checkpoint(folder=self.args.checkpoint, filename='bestd.pth')
-                self.save_train_examples(i - 1, best=True)
+                self.nnet.save_model()
+                self.dealer_nnet.save_model(filename='dealer.cur.model')
+                self.save_train_data()

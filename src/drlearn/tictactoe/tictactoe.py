@@ -4,7 +4,7 @@ from drlearn.tictactoe import TicTacToe
 from drlearn.tictactoe import TicTacToeModel
 from drlearn.agent import Agent
 
-if __name__ == "__main__":
+def run():
     nnargs.num_channels = 64     #set the default
     args.games_sim=2
     parse_args()
@@ -16,3 +16,6 @@ if __name__ == "__main__":
         agent = Agent(game, nnet, args, nnargs)
 
     main(game, nnet, mcts, agent)
+
+if __name__ == "__main__":
+    run()
