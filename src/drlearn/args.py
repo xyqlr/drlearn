@@ -15,9 +15,7 @@ args = DotDict({
     'games_eval': 50,  # Number of games to play during arena play to determine if new net will be accepted.
     'cpuct': 1,
 
-    'checkpoint': './temp/',
-    'load_model': False,
-    'load_folder_file': ('./temp', 'best.pth'),
+    'load_model': None,
     'num_iters_for_train_examples_history': 20,
     'log_level': 'INFO',
     'test': False,
@@ -34,11 +32,21 @@ nnargs = DotDict({
     'num_channels': 512,
 })
 
+class DefaultStringAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if option_string is None:
+            # If the argument is not specified, do nothing
+            return
+        if values is None:
+            # If the argument is specified without a value, use the default
+            setattr(namespace, self.dest, self.default)
+        else:
+            # If the argument is specified with a value, use that value
+            setattr(namespace, self.dest, values)
 
 def parse_args():
     # Set up argument parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument("--load", action="store_true", help="load the last best checkpoint")
     parser.add_argument("--iters", type=int, help="number of iterations")
     parser.add_argument("--games_sim", type=int, help="number of simulated games for each iteration")
     parser.add_argument("--epochs", type=int, help="number of epochs for training")
@@ -48,15 +56,26 @@ def parse_args():
     parser.add_argument("--play", action="store_true", help="play against human")
     parser.add_argument("--games_play", type=int, help="number of games to play")
     parser.add_argument("--games_eval", type=int, help="number of games to eval")
+    # Add the argument with a custom action
+    parser.add_argument(
+        '--load',
+        action=DefaultStringAction,
+        default=None,  # Default value if the argument is not specified
+        const='cur', # Default value if the argument is specified without a value
+        nargs='?',     # Allows the argument to be specified with or without a value
+        help='load a saved model (default: "cur" if --load is used without a value)'
+    )
 
     # Parse the arguments
     inargs = parser.parse_args()
 
+    # Check if the argument --load is specified
+    if inargs.load is not None:
+        args.load_model = inargs.load
     if inargs.iters:
         args.num_iters = inargs.iters
     if inargs.games_sim:
         args.games_sim = inargs.games_sim
-    args.load_model = inargs.load
     args.log_level = inargs.log_level
     args.eval = inargs.eval
     args.play = inargs.play
@@ -96,15 +115,15 @@ def main(game, nnet, mcts, agent=None):
     else:
         assert agent is not None
 
-        if args.load_model:
+        if args.load_model is not None:
             logging.info('Loading model')
-            nnet.load_model()
+            nnet.load_model(filename=f"{args.load_model}.model")
         else:
             logging.warning('Not loading a model!')
 
         if args.load_model:
             logging.info("Loading 'trainExamples' from file...")
-            agent.load_train_data()
+            agent.load_train_data(filename=f"{args.load_model}.data")
 
         logging.info('Starting the learning process 🎉')
         agent.learn()

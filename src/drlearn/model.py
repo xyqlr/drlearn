@@ -103,5 +103,5 @@ class NeuralNetModel(nn.Module):
         if not os.path.exists(filepath):
             raise ("No model in path {}".format(filepath))
         map_location = None if self.args.cuda else 'cpu'
-        checkpoint = torch.load(filepath, map_location=map_location)
-        self.load_state_dict(checkpoint['state_dict'])
+        model = torch.load(filepath, map_location=map_location)
+        self.load_state_dict(model['state_dict'])
