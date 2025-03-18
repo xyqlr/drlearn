@@ -1,5 +1,6 @@
 import logging
 from tqdm import tqdm
+from collections import deque
 
 class Arena:
     """
@@ -7,7 +8,7 @@ class Arena:
     https://github.com/suragnair/alpha-zero-general
     """
 
-    def __init__(self, player1, player2, game, display=None):
+    def __init__(self, player1, player2, game, display=None, learn_from_play=False):
         """
         Input:
             player 1,2: two functions that take the board as input, return action
@@ -22,6 +23,7 @@ class Arena:
         self.player1 = player1
         self.player2 = player2
         self.game = game
+        self.learn_from_play = learn_from_play
         self.display = display
 
     def play_game(self, verbose=False):
@@ -42,7 +44,7 @@ class Arena:
         for player in players[0], players[2]:
             if hasattr(player, "start_game"):
                 player.start_game()
-
+        play_data = []
         ended = False
         while ended == 0:
             it += 1
@@ -52,6 +54,13 @@ class Arena:
                 self.display(state)
             state_ag = self.game.get_player_agnostic_state(state, current_player)
             action = players[current_player + 1](state_ag)
+            if self.learn_from_play:
+                pi = [0] * self.game.get_action_size()
+                pi[action] = 1
+                sym = self.game.get_symmetries(state_ag, pi)
+                for b, p in sym:
+                    play_data.append([b, current_player, p])
+
 
             valids = self.game.get_valid_actions(state_ag, 1)
 
@@ -85,7 +94,9 @@ class Arena:
                 print("The second player won!")
             else:
                 print("It is a tie")
-        return reward
+        if self.learn_from_play:
+            play_data = [(x[0], x[2], ended * x[1]) for x in play_data]
+        return reward, play_data
 
     def play_games(self, num, verbose=False):
         """
@@ -102,28 +113,32 @@ class Arena:
         one_won = 0
         two_won = 0
         draws = 0
+        train_data = deque([])
         for _ in tqdm(range(num), desc="Arena.play_games (1)"):
-            game_result = self.play_game(verbose=verbose)
+            game_result, play_data = self.play_game(verbose=verbose)
             if game_result == 1:
                 one_won += 1
             elif game_result == -1:
                 two_won += 1
             else:
                 draws += 1
-
+            if self.learn_from_play:
+                train_data += play_data
         if self.game.alternate_turn:
             self.player1, self.player2 = self.player2, self.player1
 
         for _ in tqdm(range(num), desc="Arena.play_games (2)"):
-            game_result = self.play_game(verbose=verbose)
+            game_result, play_data = self.play_game(verbose=verbose)
             if game_result == -1:
                 one_won += 1
             elif game_result == 1:
                 two_won += 1
             else:
                 draws += 1
+            if self.learn_from_play:
+                train_data += play_data
 
-        return one_won, two_won, draws
+        return one_won, two_won, draws, train_data
 
     def eval_game(self, start_state, player_func):
         """

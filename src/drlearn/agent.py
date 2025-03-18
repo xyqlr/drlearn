@@ -111,7 +111,7 @@ class Agent:
             log.info('PLAYING AGAINST PREVIOUS VERSION')
             arena = Arena(lambda x: np.argmax(pmcts.get_action_prob(x, temp=0)),
                           lambda x: np.argmax(nmcts.get_action_prob(x, temp=0)), self.game)
-            pwins, nwins, draws = arena.play_games(self.args.games_eval)
+            pwins, nwins, draws, _ = arena.play_games(self.args.games_eval)
 
             if i == 1:
                 self.nnet.save_model()
@@ -154,3 +154,7 @@ class Agent:
 
             # examples based on the model were already collected (loaded)
             self.skip_first_self_play = True
+    
+    def add_train_data(self, train_data):
+        self.train_examples_history.append(train_data)
+        

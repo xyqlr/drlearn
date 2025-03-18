@@ -12,7 +12,7 @@ def run():
     nnet = TicTacToeModel(game, nnargs)
     mcts = MCTS(game, nnet, nnet, args)
     agent = None
-    if not (args.eval or args.play):
+    if not (args.eval or (args.play and not args.learn_from_play)):
         agent = Agent(game, nnet, args, nnargs)
 
     main(game, nnet, mcts, agent)

@@ -14,11 +14,11 @@ args = DotDict({
     'num_mcts_sims': 25,  # Number of game moves for MCTS to simulate.
     'games_eval': 50,  # Number of games to play during arena play to determine if new net will be accepted.
     'cpuct': 1,
-
+    'learn_from_play': False,
     'load_model': None,
     'num_iters_for_train_examples_history': 20,
     'log_level': 'INFO',
-    'test': False,
+    'eval': False,
     'play': False,
     'games_play': 2,
 })
@@ -54,6 +54,7 @@ def parse_args():
     parser.add_argument("--log_level", type=str, help="logging level", default='INFO')
     parser.add_argument("--eval", action="store_true", help="evaluate against self")
     parser.add_argument("--play", action="store_true", help="play against human")
+    parser.add_argument("--learn_from_play", action="store_true", help="continue learning from the play data")
     parser.add_argument("--games_play", type=int, help="number of games to play")
     parser.add_argument("--games_eval", type=int, help="number of games to eval")
     # Add the argument with a custom action
@@ -79,6 +80,7 @@ def parse_args():
     args.log_level = inargs.log_level
     args.eval = inargs.eval
     args.play = inargs.play
+    args.learn_from_play = inargs.learn_from_play
     if inargs.games_play:
         args.games_play = inargs.games_play
     if inargs.games_eval:
@@ -99,19 +101,37 @@ def main(game, nnet, mcts, agent=None):
 
     if args.eval:
         logging.info('Playing against self')
-        nnet.load_model()
+        if args.load_model is not None:
+            logging.info('Loading model')
+            nnet.load_model(filename=f"{args.load_model}.model")
+        else:
+            nnet.load_model()
         arena = Arena(lambda x: np.argmax(mcts.get_action_prob(x, temp=0)),
                       lambda x: np.argmax(mcts.get_action_prob(x, temp=0)), game)
-        pwins, nwins, draws = arena.play_games(args.games_eval)
+        pwins, nwins, draws, _ = arena.play_games(args.games_eval)
 
         logging.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
     elif args.play:
         logging.info("Let's play!")
-        nnet.load_model()
+        if args.load_model is not None:
+            logging.info('Loading model')
+            nnet.load_model(filename=f"{args.load_model}.model")
+        else:
+            nnet.load_model()
         cp = lambda x: np.argmax(mcts.get_action_prob(x, temp=0))
         hp = game.play
-        arena = Arena(hp, cp, game, display=game.display)
-        arena.play_games(args.games_play, verbose=True)
+        arena = Arena(hp, cp, game, display=game.display, learn_from_play=args.learn_from_play)
+        pwins, nwins, draws, play_data = arena.play_games(args.games_play, verbose=True)
+        if args.learn_from_play:
+            assert agent is not None
+            if args.load_model is not None:
+                logging.info("Loading 'trainExamples' from file...")
+                agent.load_train_data(filename=f"{args.load_model}.data")
+            else:
+                agent.load_train_data()
+            agent.add_train_data(play_data)
+            logging.info('Starting the learning process 🎉')
+            agent.learn()
     else:
         assert agent is not None
 
@@ -121,7 +141,7 @@ def main(game, nnet, mcts, agent=None):
         else:
             logging.warning('Not loading a model!')
 
-        if args.load_model:
+        if args.load_model is not None:
             logging.info("Loading 'trainExamples' from file...")
             agent.load_train_data(filename=f"{args.load_model}.data")
 
