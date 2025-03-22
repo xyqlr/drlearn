@@ -18,7 +18,7 @@ This repository starts with refactoring the Tic-Tac-Toe game along with the fram
 - Each game is under a subpackage under package drlearn, and has its own main method.
 - MCTS is added an opponent model for the case that the state is not player agnostic.
 - The play method for the human player of a game is merged to the game class.
-- The best_models subfolder archives the best model and training data for a game.
+- The saved_models subfolder saves the current model and training data for a game.
 - The tests subfolder has the unit tests, which are run in the GitHub workflow.
 
 ## Tic-Tac-Toe

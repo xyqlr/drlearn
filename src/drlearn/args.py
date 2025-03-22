@@ -16,7 +16,7 @@ args = DotDict({
     'cpuct': 1,
     'learn_from_play': False,
     'load_model': None,
-    'num_iters_for_train_examples_history': 20,
+    'num_iters_for_train_examples_history': 10,
     'log_level': 'INFO',
     'eval': False,
     'play': False,
